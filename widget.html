@@ -2395,6 +2395,9 @@
           .cloneNode(true)
           .querySelector(".card");
         card.dataset.qid = qid;
+        card.dataset.correctOpt = (record.exam_robot_correct_option || "")
+          .trim()
+          .toUpperCase();
 
         // Build metadata
         const qmetaParts = [];
@@ -2473,9 +2476,7 @@
           linkContainer.innerHTML = `<div class="muted" style="margin-top:6px;">🔗 <a target="_blank" rel="noopener" href="${escapeHtml(record.exam_robot_question_link)}">View Original Question</a></div>`;
         }
 
-        const correctOpt = (record.exam_robot_correct_option || "")
-          .trim()
-          .toUpperCase();
+        const correctOpt = card.dataset.correctOpt;
         const resPanel = card.querySelector('[data-result="1"]');
         const resText = card.querySelector('[data-result-text="1"]');
 
@@ -2505,7 +2506,7 @@
         }
 
         // Event delegation will handle clicks
-        attachCardEventHandlers(card, qid, correctOpt);
+        attachCardEventHandlers(card);
 
         console.debug(
           `[perf] buildCard in ${(performance.now() - t0).toFixed(1)}ms`,
@@ -2513,26 +2514,31 @@
         return card;
       }
 
-      function attachCardEventHandlers(card, qid, correctOpt) {
-        // Section button handlers
-        card.querySelectorAll("[data-section]").forEach((btn) => {
-          btn.addEventListener("click", (e) => {
-            const section = btn.getAttribute("data-section");
+      function attachCardEventHandlers(card) {
+        if (card.dataset.handlersBound === "1") return;
+        card.dataset.handlersBound = "1";
+
+        // Main card click handler
+        card.addEventListener("click", async (e) => {
+          const qid = card.dataset.qid;
+          const correctOpt = card.dataset.correctOpt || "";
+
+          const sectionBtn = e.target.closest("[data-section]");
+          if (sectionBtn) {
+            const section = sectionBtn.getAttribute("data-section");
             card
               .querySelectorAll("[data-section]")
               .forEach((b) => b.classList.remove("active"));
-            btn.classList.add("active");
+            sectionBtn.classList.add("active");
             card
               .querySelectorAll("[data-content]")
               .forEach((c) => c.classList.remove("show"));
             card
               .querySelector(`[data-content="${section}"]`)
               .classList.add("show");
-          });
-        });
+            return;
+          }
 
-        // Main card click handler
-        card.addEventListener("click", async (e) => {
           const titleEl = e.target.closest("[data-copy-qid]");
           if (titleEl) {
             const idToCopy = titleEl.getAttribute("data-copy-qid") || "";
@@ -2644,11 +2650,21 @@
       // RENDERING AND VIRTUAL SCROLLING
       // ============================================================================
       let currentFilteredRecords = [];
-      let renderCursor = 0;
       let renderObserver = null;
-      let loadSentinel = null;
       let emptyStateEl = null;
-      const BATCH_SIZE = 50; // Increased from 40
+      let virtualTopSpacer = null;
+      let virtualBottomSpacer = null;
+      let virtualWindow = null;
+      let virtualProbe = null;
+      const virtualCardPool = [];
+      const activeVirtualCards = new Map();
+      let lastRenderRange = { start: 0, end: 0 };
+      let virtualFrameRequest = null;
+      let estimatedCardHeight = 420;
+      let lastMeasuredScrollTop = 0;
+      let pendingScrollRestore = null;
+      const BASE_BATCH_SIZE = 24;
+      const MAX_POOL_SIZE = 320;
 
       function buildEmptyStateElement() {
         const emptyState = document.createElement("div");
@@ -2663,34 +2679,127 @@
         return emptyState;
       }
 
-      function renderNextBatch() {
-        const t0 = performance.now();
-        const app = document.getElementById("app");
-        const fragment = document.createDocumentFragment();
-        const end = Math.min(
-          renderCursor + BATCH_SIZE,
-          currentFilteredRecords.length,
+      function getDynamicBatchSize() {
+        const viewportHeight = window.innerHeight || 900;
+        const cardsPerViewport = Math.max(
+          8,
+          Math.ceil(viewportHeight / estimatedCardHeight),
         );
+        return Math.max(BASE_BATCH_SIZE, cardsPerViewport * 4);
+      }
 
-        for (let i = renderCursor; i < end; i++) {
-          fragment.appendChild(buildCard(currentFilteredRecords[i], i));
+      function captureScrollRestoreSnapshot() {
+        if (!currentFilteredRecords.length) return;
+        const scrollTop = window.scrollY || window.pageYOffset || 0;
+        const index = Math.min(
+          currentFilteredRecords.length - 1,
+          Math.max(0, Math.floor(scrollTop / estimatedCardHeight)),
+        );
+        const record = currentFilteredRecords[index];
+        if (!record) return;
+        pendingScrollRestore = {
+          qid: getRecordId(record, index),
+          offsetWithinCard: Math.max(0, scrollTop - index * estimatedCardHeight),
+          absoluteScrollTop: scrollTop,
+        };
+      }
+
+      function recycleCardElement(card) {
+        if (!card) return;
+        card.remove();
+        if (virtualCardPool.length < MAX_POOL_SIZE) {
+          virtualCardPool.push(card);
+        }
+      }
+
+      function acquireCardElement(record, index) {
+        const card = virtualCardPool.pop();
+        if (!card) {
+          return buildCard(record, index);
+        }
+        const refreshed = buildCard(record, index);
+        card.className = refreshed.className;
+        card.dataset.qid = refreshed.dataset.qid;
+        card.dataset.correctOpt = refreshed.dataset.correctOpt;
+        card.dataset.answered = refreshed.dataset.answered || "";
+        card.replaceChildren(...Array.from(refreshed.childNodes));
+        attachCardEventHandlers(card);
+        return card;
+      }
+
+      function updateEstimatedCardHeight() {
+        if (!virtualWindow) return;
+        const samples = Array.from(virtualWindow.children).slice(0, 6);
+        if (!samples.length) return;
+        const totalHeight = samples.reduce(
+          (sum, el) => sum + el.getBoundingClientRect().height,
+          0,
+        );
+        const measured = totalHeight / samples.length;
+        if (Number.isFinite(measured) && measured > 150) {
+          estimatedCardHeight = estimatedCardHeight * 0.75 + measured * 0.25;
+        }
+      }
+
+      function scheduleVirtualWindowRender() {
+        if (virtualFrameRequest) return;
+        virtualFrameRequest = requestAnimationFrame(() => {
+          virtualFrameRequest = null;
+          renderVirtualWindow();
+        });
+      }
+
+      function renderVirtualWindow() {
+        if (!virtualWindow || !virtualTopSpacer || !virtualBottomSpacer) return;
+        const total = currentFilteredRecords.length;
+        if (!total) return;
+
+        const t0 = performance.now();
+        const scrollTop = window.scrollY || window.pageYOffset || 0;
+        lastMeasuredScrollTop = scrollTop;
+        const viewportHeight = window.innerHeight || 900;
+        const dynamicBatch = getDynamicBatchSize();
+        const visibleCount = Math.max(
+          8,
+          Math.ceil(viewportHeight / estimatedCardHeight),
+        );
+        const overscan = Math.max(dynamicBatch, visibleCount * 2);
+        const start = Math.max(
+          0,
+          Math.floor(scrollTop / estimatedCardHeight) - Math.floor(overscan / 2),
+        );
+        const end = Math.min(total, start + overscan + visibleCount);
+
+        if (start === lastRenderRange.start && end === lastRenderRange.end) return;
+
+        const nextVisible = new Map();
+        for (let i = start; i < end; i++) {
+          const existing = activeVirtualCards.get(i);
+          nextVisible.set(i, existing || acquireCardElement(currentFilteredRecords[i], i));
         }
 
-        renderCursor = end;
-
-        if (loadSentinel) loadSentinel.remove();
-        app.appendChild(fragment);
-
-        if (renderCursor < currentFilteredRecords.length) {
-          if (!loadSentinel) {
-            loadSentinel = document.createElement("div");
-            loadSentinel.style.height = "1px";
+        for (const [idx, card] of activeVirtualCards.entries()) {
+          if (!nextVisible.has(idx)) {
+            recycleCardElement(card);
           }
-          app.appendChild(loadSentinel);
         }
+
+        activeVirtualCards.clear();
+        const fragment = document.createDocumentFragment();
+        for (let i = start; i < end; i++) {
+          const card = nextVisible.get(i);
+          activeVirtualCards.set(i, card);
+          fragment.appendChild(card);
+        }
+        virtualWindow.replaceChildren(fragment);
+
+        virtualTopSpacer.style.height = `${Math.max(0, start * estimatedCardHeight)}px`;
+        virtualBottomSpacer.style.height = `${Math.max(0, (total - end) * estimatedCardHeight)}px`;
+        lastRenderRange = { start, end };
+        updateEstimatedCardHeight();
 
         console.debug(
-          `[perf] renderNextBatch: ${end - (renderCursor - (end - renderCursor))} cards in ${(performance.now() - t0).toFixed(1)}ms`,
+          `[perf] renderVirtualWindow: ${end - start} cards (${start}-${end}) in ${(performance.now() - t0).toFixed(1)}ms`,
         );
       }
 
@@ -2699,17 +2808,24 @@
           renderObserver.disconnect();
         }
 
+        const viewportHeight = window.innerHeight || 900;
+        const preload = Math.max(240, Math.floor(viewportHeight * 0.6));
+        const adaptiveThresholds = [0, 0.1, Math.min(1, 360 / viewportHeight), 1];
+
         renderObserver = new IntersectionObserver(
           (entries) => {
             if (entries.some((entry) => entry.isIntersecting)) {
-              renderNextBatch();
+              scheduleVirtualWindowRender();
             }
           },
-          { rootMargin: "200px" },
-        ); // Pre-load earlier
+          {
+            rootMargin: `${preload}px 0px ${preload}px 0px`,
+            threshold: adaptiveThresholds,
+          },
+        );
 
-        if (loadSentinel) {
-          renderObserver.observe(loadSentinel);
+        if (virtualProbe) {
+          renderObserver.observe(virtualProbe);
         }
       }
 
@@ -2718,8 +2834,13 @@
         const app = document.getElementById("app");
         app.innerHTML = "";
 
+        captureScrollRestoreSnapshot();
         currentFilteredRecords = records;
-        renderCursor = 0;
+        lastRenderRange = { start: -1, end: -1 };
+        for (const card of activeVirtualCards.values()) {
+          recycleCardElement(card);
+        }
+        activeVirtualCards.clear();
 
         emptyStateEl = buildEmptyStateElement();
         app.appendChild(emptyStateEl);
@@ -2734,9 +2855,54 @@
         }
 
         emptyStateEl.classList.add("isHidden");
+
+        virtualTopSpacer = document.createElement("div");
+        virtualBottomSpacer = document.createElement("div");
+        virtualWindow = document.createElement("div");
+        virtualProbe = document.createElement("div");
+        virtualProbe.style.height = "1px";
+        virtualProbe.style.width = "100%";
+        virtualProbe.style.pointerEvents = "none";
+
+        app.appendChild(virtualTopSpacer);
+        app.appendChild(virtualWindow);
+        app.appendChild(virtualBottomSpacer);
+        app.appendChild(virtualProbe);
+
         updateHeaderStats(records);
-        renderNextBatch();
+        renderVirtualWindow();
         setupRenderObserver();
+
+        if (!window.__virtualScrollBound) {
+          window.addEventListener("scroll", scheduleVirtualWindowRender, {
+            passive: true,
+          });
+          window.addEventListener("resize", () => {
+            lastRenderRange = { start: -1, end: -1 };
+            setupRenderObserver();
+            scheduleVirtualWindowRender();
+          });
+          window.__virtualScrollBound = true;
+        }
+
+        if (pendingScrollRestore) {
+          const restore = pendingScrollRestore;
+          pendingScrollRestore = null;
+          requestAnimationFrame(() => {
+            const restoreIndex = currentFilteredRecords.findIndex(
+              (record, idx) => getRecordId(record, idx) === restore.qid,
+            );
+            const top =
+              restoreIndex >= 0
+                ? restoreIndex * estimatedCardHeight + restore.offsetWithinCard
+                : Math.min(
+                    restore.absoluteScrollTop,
+                    document.documentElement.scrollHeight - window.innerHeight,
+                  );
+            window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+            scheduleVirtualWindowRender();
+          });
+        }
 
         console.debug(
           `[perf] renderFilteredData: ${records.length} records prepared in ${(performance.now() - t0).toFixed(1)}ms`,
@@ -2749,6 +2915,7 @@
         if (pendingFilterUpdate) {
           cancelAnimationFrame(pendingFilterUpdate);
         }
+        captureScrollRestoreSnapshot();
         pendingFilterUpdate = requestAnimationFrame(() => {
           pendingFilterUpdate = null;
           renderFilteredData(getFilteredData());
