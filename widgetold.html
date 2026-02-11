@@ -1943,7 +1943,7 @@
           // Save to localStorage
           try {
             localStorage.setItem(this.storageKey, JSON.stringify(this.state));
-            console.debug(
+            debugLog(
               `[perf] State flushed ${this.pendingChanges.size} changes in ${(performance.now() - t0).toFixed(1)}ms`,
             );
           } catch (e) {
@@ -2081,6 +2081,26 @@
         "exam_robot_answer_sources",
       ];
       const SEARCH_SETTINGS_KEY = "mcq_search_settings_v1";
+      const DEBUG = false;
+
+      const perfMetrics = {
+        searchLatencies: [],
+        workerQueryTimes: [],
+        facetOpenTimes: [],
+      };
+      window.__perfMetrics = perfMetrics;
+
+      function debugLog(...args) {
+        if (!DEBUG) return;
+        console.debug(...args);
+      }
+
+      function recordPerfMetric(bucket, value) {
+        if (!perfMetrics[bucket] || !Number.isFinite(value)) return;
+        const arr = perfMetrics[bucket];
+        arr.push(value);
+        if (arr.length > 100) arr.shift();
+      }
       let searchSettings = {
         scopeQuestion: true,
         scopeOptions: true,
@@ -2178,6 +2198,21 @@
       function buildSearchRows(data) {
         const t0 = performance.now();
         const rows = data.map((r, index) => {
+          const questionScope = r.exam_robot_question || "";
+          const optionsScope = [
+            r.exam_robot_option_a || "",
+            r.exam_robot_option_b || "",
+            r.exam_robot_option_c || "",
+            r.exam_robot_option_d || "",
+          ].join("\n");
+          const explanationScope = [
+            r.exam_robot_explanation || "",
+            r.exam_robot_verdict || "",
+            r.exam_robot_how_to_study || "",
+            r.exam_robot_vault || "",
+            r.exam_robot_answer_sources || "",
+          ].join("\n");
+
           return {
             index,
             record: r,
@@ -2187,24 +2222,18 @@
             theme: r.exam_robot_theme || "",
             topic: (r.exam_robot_topic || "").trim(),
             searchScopes: {
-              question: r.exam_robot_question || "",
-              options: [
-                r.exam_robot_option_a || "",
-                r.exam_robot_option_b || "",
-                r.exam_robot_option_c || "",
-                r.exam_robot_option_d || "",
-              ].join("\n"),
-              explanation: [
-                r.exam_robot_explanation || "",
-                r.exam_robot_verdict || "",
-                r.exam_robot_how_to_study || "",
-                r.exam_robot_vault || "",
-                r.exam_robot_answer_sources || "",
-              ].join("\n"),
+              question: questionScope,
+              options: optionsScope,
+              explanation: explanationScope,
+            },
+            searchScopesLower: {
+              question: questionScope.toLowerCase(),
+              options: optionsScope.toLowerCase(),
+              explanation: explanationScope.toLowerCase(),
             },
           };
         });
-        console.debug(
+        debugLog(
           `[perf] buildSearchRows: ${rows.length} rows in ${(performance.now() - t0).toFixed(1)}ms`,
         );
         return rows;
@@ -2257,13 +2286,39 @@
           return out;
         }
 
-        function unionSorted(lists) {
-          const merged = new Set();
-          for (const list of lists) {
-            if (!list) continue;
-            for (const id of list) merged.add(id);
+        function mergeSortedUnique(lists) {
+          const positions = new Array(lists.length).fill(0);
+          const output = [];
+          let last = -1;
+
+          while (true) {
+            let minValue = Infinity;
+            let hasValue = false;
+
+            for (let i = 0; i < lists.length; i++) {
+              const list = lists[i];
+              const pos = positions[i];
+              if (pos >= list.length) continue;
+              const value = list[pos];
+              if (value < minValue) minValue = value;
+              hasValue = true;
+            }
+
+            if (!hasValue) break;
+            if (minValue !== last) {
+              output.push(minValue);
+              last = minValue;
+            }
+
+            for (let i = 0; i < lists.length; i++) {
+              const list = lists[i];
+              let pos = positions[i];
+              while (pos < list.length && list[pos] <= minValue) pos++;
+              positions[i] = pos;
+            }
           }
-          return Array.from(merged).sort((a, b) => a - b);
+
+          return output;
         }
 
         function buildSearchCandidates(tokens, scopes) {
@@ -2276,7 +2331,15 @@
           if (!activeScopes.length) activeScopes.push("question", "options", "explanation");
 
           for (const token of tokens) {
-            const tokenUnion = unionSorted(activeScopes.map((scope) => indexes[scope].get(token) || []));
+            const postings = [];
+            for (let i = 0; i < activeScopes.length; i++) {
+              const list = indexes[activeScopes[i]].get(token);
+              if (list && list.length) postings.push(list);
+            }
+            if (!postings.length) return [];
+
+            postings.sort((a, b) => a.length - b.length);
+            const tokenUnion = postings.length === 1 ? postings[0] : mergeSortedUnique(postings);
             if (!tokenUnion.length) return [];
             candidates = candidates === null ? tokenUnion : intersectSorted(candidates, tokenUnion);
             if (!candidates.length) return [];
@@ -2295,7 +2358,9 @@
 
         function runSearch(payload) {
           const { requestId, tokens, scopes, filters } = payload;
+          const tStart = performance.now();
           const candidates = buildSearchCandidates(tokens, scopes);
+          const queryMs = performance.now() - tStart;
           let firstBatch = [];
           const allMatches = [];
 
@@ -2306,8 +2371,8 @@
             if (firstBatch.length < 50) firstBatch.push(idx);
           }
 
-          postMessage({ type: "FIRST_BATCH", requestId, indices: firstBatch, count: allMatches.length, candidates });
-          postMessage({ type: "SEARCH_DONE", requestId, indices: allMatches, count: allMatches.length, candidates });
+          postMessage({ type: "FIRST_BATCH", requestId, indices: firstBatch, count: allMatches.length, candidates, queryMs });
+          postMessage({ type: "SEARCH_DONE", requestId, indices: allMatches, count: allMatches.length, candidates, queryMs });
         }
 
         self.onmessage = (event) => {
@@ -2324,16 +2389,19 @@
       let searchWorker = null;
       let searchWorkerReady = false;
       let lastSearchRequestId = 0;
+      let pendingSearchInputAt = null;
+      let pendingFacetOpenAt = null;
       let latestSearchCandidateIndices = [];
       let latestSearchCandidatesKey = null;
       let latestFilteredRecords = [];
+      const SEARCH_CACHE_MAX_ENTRIES = 200;
       const searchResultCache = new Map();
       let ALL_ROW_INDICES = [];
 
       function invalidateSearchCache(reason = "unknown") {
         searchResultCache.clear();
         latestSearchCandidatesKey = null;
-        console.debug(`[perf] search cache invalidated (${reason})`);
+        debugLog(`[perf] search cache invalidated (${reason})`);
       }
 
       function getSearchCacheKey(searchTextLower, scopes, filters) {
@@ -2358,6 +2426,26 @@
         ].join("||");
       }
 
+      function getCachedSearchResult(cacheKey) {
+        if (!searchResultCache.has(cacheKey)) return null;
+        const value = searchResultCache.get(cacheKey);
+        searchResultCache.delete(cacheKey);
+        searchResultCache.set(cacheKey, value);
+        return value;
+      }
+
+      function setCachedSearchResult(cacheKey, payload) {
+        if (!cacheKey) return;
+        if (searchResultCache.has(cacheKey)) {
+          searchResultCache.delete(cacheKey);
+        }
+        searchResultCache.set(cacheKey, payload);
+        if (searchResultCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+          const oldestKey = searchResultCache.keys().next().value;
+          searchResultCache.delete(oldestKey);
+        }
+      }
+
       function initSearchWorker(rows) {
         if (searchWorker) {
           searchWorker.terminate();
@@ -2376,7 +2464,7 @@
           const payload = event.data || {};
           if (payload.type === "INIT_DONE") {
             searchWorkerReady = true;
-            console.debug(
+            debugLog(
               `[perf] search worker initialized (${payload.count} rows)`,
             );
             scheduleFilteredUpdate();
@@ -2386,6 +2474,7 @@
           if (payload.requestId !== lastSearchRequestId) return;
 
           if (payload.type === "FIRST_BATCH") {
+            recordPerfMetric("workerQueryTimes", payload.queryMs || 0);
             const firstBatchRecords = (payload.indices || []).map(
               (idx) => ROWS[idx].record,
             );
@@ -2407,12 +2496,10 @@
             latestSearchCandidatesKey = searchWorker._activeCandidatesKey || null;
             latestFilteredRecords = allRecords;
             const cacheKey = searchWorker._activeCacheKey;
-            if (cacheKey) {
-              searchResultCache.set(cacheKey, {
-                records: allRecords,
-                candidates: latestSearchCandidateIndices,
-              });
-            }
+            setCachedSearchResult(cacheKey, {
+              indices: payload.indices || [],
+              candidates: latestSearchCandidateIndices,
+            });
             renderFilteredData(allRecords, {
               partial: false,
               totalCount: payload.count || allRecords.length,
@@ -2483,7 +2570,7 @@
           );
         });
 
-        console.debug(
+        debugLog(
           `[perf] buildFacetValueUniverse in ${(performance.now() - t0).toFixed(1)}ms`,
         );
       }
@@ -2607,11 +2694,9 @@
         const indices = [];
         for (let i = 0; i < ROWS.length; i++) {
           const row = ROWS[i];
-          const questionText = (row.searchScopes?.question || "").toLowerCase();
-          const optionsText = (row.searchScopes?.options || "").toLowerCase();
-          const explanationText = (
-            row.searchScopes?.explanation || ""
-          ).toLowerCase();
+          const questionText = row.searchScopesLower?.question || "";
+          const optionsText = row.searchScopesLower?.options || "";
+          const explanationText = row.searchScopesLower?.explanation || "";
 
           const tokenFoundInActiveScope = (token) => {
             if (activeScopes.includes("question") && questionText.includes(token))
@@ -2674,11 +2759,12 @@
           filtersPayload,
         );
 
-        if (searchResultCache.has(cacheKey)) {
-          const cached = searchResultCache.get(cacheKey);
+        const cached = getCachedSearchResult(cacheKey);
+        if (cached) {
           latestSearchCandidateIndices = cached.candidates || [];
           latestSearchCandidatesKey = candidatesKey;
-          latestFilteredRecords = cached.records || [];
+          const cachedIndices = cached.indices || [];
+          latestFilteredRecords = cachedIndices.map((idx) => ROWS[idx].record);
           renderFilteredData(latestFilteredRecords, {
             partial: false,
             totalCount: latestFilteredRecords.length,
@@ -2835,7 +2921,7 @@
         // Event delegation will handle clicks
         attachCardEventHandlers(card, qid, correctOpt);
 
-        console.debug(
+        debugLog(
           `[perf] buildCard in ${(performance.now() - t0).toFixed(1)}ms`,
         );
         return card;
@@ -3017,7 +3103,7 @@
           app.appendChild(loadSentinel);
         }
 
-        console.debug(
+        debugLog(
           `[perf] renderNextBatch: ${end - (renderCursor - (end - renderCursor))} cards in ${(performance.now() - t0).toFixed(1)}ms`,
         );
       }
@@ -3056,7 +3142,13 @@
           emptyStateEl.classList.remove("isHidden");
           updateHeaderStats(records, options.totalCount ?? records.length);
           updateFilterButtons();
-          console.debug(
+          if (pendingSearchInputAt !== null) {
+            const latency = performance.now() - pendingSearchInputAt;
+            recordPerfMetric("searchLatencies", latency);
+            pendingSearchInputAt = null;
+            debugLog(`[perf] search latency: ${latency.toFixed(1)}ms`);
+          }
+          debugLog(
             `[perf] renderFilteredData: empty state in ${(performance.now() - t0).toFixed(1)}ms`,
           );
           return;
@@ -3071,7 +3163,14 @@
           setupRenderObserver();
         }
 
-        console.debug(
+        if (pendingSearchInputAt !== null) {
+          const latency = performance.now() - pendingSearchInputAt;
+          recordPerfMetric("searchLatencies", latency);
+          pendingSearchInputAt = null;
+          debugLog(`[perf] search latency: ${latency.toFixed(1)}ms`);
+        }
+
+        debugLog(
           `[perf] renderFilteredData: ${records.length} records prepared in ${(performance.now() - t0).toFixed(1)}ms${
             options.partial ? " (progressive-first-batch)" : ""
           }`,
@@ -3272,7 +3371,7 @@
           facetPopupCache.key === key &&
           facetPopupCache.facetKey === facetKey
         ) {
-          console.debug(`[perf] computeFacetCounts: cache hit`);
+          debugLog(`[perf] computeFacetCounts: cache hit`);
           return facetPopupCache.values;
         }
 
@@ -3297,7 +3396,7 @@
         facetPopupCache.facetKey = facetKey;
         facetPopupCache.values = values;
 
-        console.debug(
+        debugLog(
           `[perf] computeFacetCounts(${facetKey}) in ${(performance.now() - t0).toFixed(1)}ms`,
         );
         return values;
@@ -3402,7 +3501,13 @@
         if (allFacetValues.length === 0) {
           filterPopupList.innerHTML = `<div class="muted">No values found.</div>`;
           if (filterSortToggle) filterSortToggle.disabled = true;
-          console.debug(
+          if (pendingFacetOpenAt !== null) {
+            const facetMs = performance.now() - pendingFacetOpenAt;
+            recordPerfMetric("facetOpenTimes", facetMs);
+            pendingFacetOpenAt = null;
+            debugLog(`[perf] facet popup open latency: ${facetMs.toFixed(1)}ms`);
+          }
+          debugLog(
             `[perf] renderFilterPopup(empty) in ${(performance.now() - t0).toFixed(1)}ms`,
           );
           return;
@@ -3444,7 +3549,14 @@
         filterPopupList.innerHTML = "";
         filterPopupList.appendChild(fragment);
 
-        console.debug(
+        if (pendingFacetOpenAt !== null) {
+          const facetMs = performance.now() - pendingFacetOpenAt;
+          recordPerfMetric("facetOpenTimes", facetMs);
+          pendingFacetOpenAt = null;
+          debugLog(`[perf] facet popup open latency: ${facetMs.toFixed(1)}ms`);
+        }
+
+        debugLog(
           `[perf] renderFilterPopup(${allFacetValues.length} values) in ${(performance.now() - t0).toFixed(1)}ms`,
         );
       }
@@ -3533,6 +3645,7 @@
       }
 
       function openFilterPopup(filterType, anchorEl) {
+        pendingFacetOpenAt = performance.now();
         activeFilterType = filterType;
         tempSelectionSet = new Set(currentFilters[filterType]);
         popupSearchQuery = "";
@@ -3786,6 +3899,7 @@
       document.getElementById("clientSearch").addEventListener(
         "input",
         debounce(() => {
+          pendingSearchInputAt = performance.now();
           scheduleFilteredUpdate();
         }, 200),
       );
@@ -3957,7 +4071,7 @@
         latestFilteredRecords = ROWS.map((row) => row.record);
         scheduleFilteredUpdate();
 
-        console.debug(
+        debugLog(
           `[perf] onRecords -> ${DATA.length} rows processed in ${(performance.now() - t0).toFixed(1)}ms`,
         );
       });
