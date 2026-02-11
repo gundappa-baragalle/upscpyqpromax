@@ -2140,50 +2140,237 @@
       }
 
       // ============================================================================
-      // SEARCH INDEX
+      // SEARCH INDEX + WEB WORKER
       // ============================================================================
-      function buildSearchBlobs(data) {
+      function tokenizeSearchText(value) {
+        return Array.from(
+          new Set(
+            String(value || "")
+              .toLowerCase()
+              .split(/[^\p{L}\p{N}]+/u)
+              .map((token) => token.trim())
+              .filter((token) => token.length > 1),
+          ),
+        );
+      }
+
+      function buildSearchRows(data) {
         const t0 = performance.now();
         const rows = data.map((r, index) => {
-          const questionBlob = (r.exam_robot_question || "").toLowerCase();
-          const optionsBlob = [
-            r.exam_robot_option_a || "",
-            r.exam_robot_option_b || "",
-            r.exam_robot_option_c || "",
-            r.exam_robot_option_d || "",
-          ]
-            .join("\n")
-            .toLowerCase();
-          const explanationBlob = [
-            r.exam_robot_explanation || "",
-            r.exam_robot_verdict || "",
-            r.exam_robot_how_to_study || "",
-            r.exam_robot_vault || "",
-            r.exam_robot_answer_sources || "",
-          ]
-            .join("\n")
-            .toLowerCase();
-
-          const blob = [questionBlob, optionsBlob, explanationBlob].join("\n");
-
           return {
             index,
             record: r,
-            searchBlob: blob,
-            questionBlob,
-            optionsBlob,
-            explanationBlob,
             exam: r.exam_robot_exam || "",
             year: r.exam_robot_year || "",
             subject: r.exam_robot_subject || "",
             theme: r.exam_robot_theme || "",
             topic: (r.exam_robot_topic || "").trim(),
+            searchScopes: {
+              question: r.exam_robot_question || "",
+              options: [
+                r.exam_robot_option_a || "",
+                r.exam_robot_option_b || "",
+                r.exam_robot_option_c || "",
+                r.exam_robot_option_d || "",
+              ].join("\n"),
+              explanation: [
+                r.exam_robot_explanation || "",
+                r.exam_robot_verdict || "",
+                r.exam_robot_how_to_study || "",
+                r.exam_robot_vault || "",
+                r.exam_robot_answer_sources || "",
+              ].join("\n"),
+            },
           };
         });
         console.debug(
-          `[perf] buildSearchBlobs: ${rows.length} rows in ${(performance.now() - t0).toFixed(1)}ms`,
+          `[perf] buildSearchRows: ${rows.length} rows in ${(performance.now() - t0).toFixed(1)}ms`,
         );
         return rows;
+      }
+
+      const SEARCH_WORKER_SCRIPT = `
+        let rows = [];
+        let indexes = { question: new Map(), options: new Map(), explanation: new Map() };
+
+        function tokenize(text) {
+          return Array.from(new Set(
+            String(text || "")
+              .toLowerCase()
+              .split(/[^\\p{L}\\p{N}]+/u)
+              .map((token) => token.trim())
+              .filter((token) => token.length > 1)
+          ));
+        }
+
+        function addTokenPosting(indexMap, token, rowIndex) {
+          if (!indexMap.has(token)) indexMap.set(token, []);
+          indexMap.get(token).push(rowIndex);
+        }
+
+        function buildIndexes(payloadRows) {
+          rows = payloadRows;
+          indexes = { question: new Map(), options: new Map(), explanation: new Map() };
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const scopeMap = {
+              question: row.searchScopes?.question || "",
+              options: row.searchScopes?.options || "",
+              explanation: row.searchScopes?.explanation || "",
+            };
+            for (const scope of Object.keys(scopeMap)) {
+              const tokens = tokenize(scopeMap[scope]);
+              for (const token of tokens) addTokenPosting(indexes[scope], token, i);
+            }
+          }
+        }
+
+        function intersectSorted(a, b) {
+          let i = 0, j = 0;
+          const out = [];
+          while (i < a.length && j < b.length) {
+            if (a[i] === b[j]) { out.push(a[i]); i++; j++; }
+            else if (a[i] < b[j]) i++;
+            else j++;
+          }
+          return out;
+        }
+
+        function unionSorted(lists) {
+          const merged = new Set();
+          for (const list of lists) {
+            if (!list) continue;
+            for (const id of list) merged.add(id);
+          }
+          return Array.from(merged).sort((a, b) => a - b);
+        }
+
+        function buildSearchCandidates(tokens, scopes) {
+          if (!tokens.length) return rows.map((_, idx) => idx);
+          let candidates = null;
+          const activeScopes = [];
+          if (scopes.scopeQuestion) activeScopes.push("question");
+          if (scopes.scopeOptions) activeScopes.push("options");
+          if (scopes.scopeExplanation) activeScopes.push("explanation");
+          if (!activeScopes.length) activeScopes.push("question", "options", "explanation");
+
+          for (const token of tokens) {
+            const tokenUnion = unionSorted(activeScopes.map((scope) => indexes[scope].get(token) || []));
+            if (!tokenUnion.length) return [];
+            candidates = candidates === null ? tokenUnion : intersectSorted(candidates, tokenUnion);
+            if (!candidates.length) return [];
+          }
+          return candidates || [];
+        }
+
+        function rowMatchesFilters(row, filters) {
+          if (filters.exam.length && !filters.exam.includes(row.exam)) return false;
+          if (filters.year.length && !filters.year.includes(row.year)) return false;
+          if (filters.subject.length && !filters.subject.includes(row.subject)) return false;
+          if (filters.theme.length && !filters.theme.includes(row.theme)) return false;
+          if (filters.topic.length && !filters.topic.includes(row.topic)) return false;
+          return true;
+        }
+
+        function runSearch(payload) {
+          const { requestId, tokens, scopes, filters } = payload;
+          const candidates = buildSearchCandidates(tokens, scopes);
+          let firstBatch = [];
+          const allMatches = [];
+
+          for (let i = 0; i < candidates.length; i++) {
+            const idx = candidates[i];
+            if (!rowMatchesFilters(rows[idx], filters)) continue;
+            allMatches.push(idx);
+            if (firstBatch.length < 50) firstBatch.push(idx);
+          }
+
+          postMessage({ type: "FIRST_BATCH", requestId, indices: firstBatch, count: allMatches.length, candidates });
+          postMessage({ type: "SEARCH_DONE", requestId, indices: allMatches, count: allMatches.length, candidates });
+        }
+
+        self.onmessage = (event) => {
+          const payload = event.data || {};
+          if (payload.type === "INIT") {
+            buildIndexes(payload.rows || []);
+            postMessage({ type: "INIT_DONE", count: rows.length });
+            return;
+          }
+          if (payload.type === "SEARCH") runSearch(payload);
+        };
+      `;
+
+      let searchWorker = null;
+      let searchWorkerReady = false;
+      let lastSearchRequestId = 0;
+      let latestSearchCandidateIndices = [];
+      let latestFilteredRecords = [];
+      const searchResultCache = new Map();
+
+      function invalidateSearchCache(reason = "unknown") {
+        searchResultCache.clear();
+        console.debug(`[perf] search cache invalidated (${reason})`);
+      }
+
+      function getSearchCacheKey(searchTextLower, scopes, filters) {
+        const filterKey = FACET_KEYS.map((key) => `${key}:${(filters[key] || []).slice().sort().join("|")}`).join("::");
+        return [
+          searchTextLower,
+          `q:${Number(scopes.scopeQuestion)}`,
+          `o:${Number(scopes.scopeOptions)}`,
+          `e:${Number(scopes.scopeExplanation)}`,
+          filterKey,
+        ].join("||");
+      }
+
+      function initSearchWorker(rows) {
+        if (searchWorker) {
+          searchWorker.terminate();
+          searchWorker = null;
+        }
+
+        const blob = new Blob([SEARCH_WORKER_SCRIPT], {
+          type: "application/javascript",
+        });
+        const workerUrl = URL.createObjectURL(blob);
+        searchWorker = new Worker(workerUrl);
+        URL.revokeObjectURL(workerUrl);
+
+        searchWorkerReady = false;
+        searchWorker.onmessage = (event) => {
+          const payload = event.data || {};
+          if (payload.type === "INIT_DONE") {
+            searchWorkerReady = true;
+            console.debug(`[perf] search worker initialized (${payload.count} rows)`);
+            return;
+          }
+
+          if (payload.requestId !== lastSearchRequestId) return;
+
+          if (payload.type === "FIRST_BATCH") {
+            const firstBatchRecords = (payload.indices || []).map((idx) => ROWS[idx].record);
+            latestSearchCandidateIndices = payload.candidates || [];
+            latestFilteredRecords = firstBatchRecords;
+            renderFilteredData(firstBatchRecords, { partial: true, totalCount: payload.count || firstBatchRecords.length });
+            return;
+          }
+
+          if (payload.type === "SEARCH_DONE") {
+            const allRecords = (payload.indices || []).map((idx) => ROWS[idx].record);
+            latestSearchCandidateIndices = payload.candidates || [];
+            latestFilteredRecords = allRecords;
+            const cacheKey = searchWorker._activeCacheKey;
+            if (cacheKey) {
+              searchResultCache.set(cacheKey, {
+                records: allRecords,
+                candidates: latestSearchCandidateIndices,
+              });
+            }
+            renderFilteredData(allRecords, { partial: false, totalCount: payload.count || allRecords.length });
+          }
+        };
+
+        searchWorker.postMessage({ type: "INIT", rows });
       }
 
       // ============================================================================
@@ -2291,23 +2478,18 @@
           .toLowerCase();
       }
 
-      function rowMatchesSearch(row, searchTextLower) {
-        if (!searchTextLower) return true;
-        const scopes = getEffectiveScopes();
-        if (scopes.scopeQuestion && row.questionBlob.includes(searchTextLower))
-          return true;
-        if (scopes.scopeOptions && row.optionsBlob.includes(searchTextLower))
-          return true;
-        if (
-          scopes.scopeExplanation &&
-          row.explanationBlob.includes(searchTextLower)
-        )
-          return true;
-        return false;
+      function getFiltersPayload() {
+        return {
+          exam: [...currentFilterSets.exam],
+          year: [...currentFilterSets.year],
+          subject: [...currentFilterSets.subject],
+          theme: [...currentFilterSets.theme],
+          topic: [...currentFilterSets.topic],
+        };
       }
 
       function escapeRegExp(value) {
-        return value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&");
+        return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       }
 
       function highlightText(text, searchTextLower) {
@@ -2315,14 +2497,7 @@
         if (!searchSettings.highlight || !searchTextLower)
           return escapeHtml(raw);
 
-        const terms = Array.from(
-          new Set(
-            searchTextLower
-              .split(/\s+/)
-              .map((t) => t.trim())
-              .filter(Boolean),
-          ),
-        );
+        const terms = tokenizeSearchText(searchTextLower);
         if (!terms.length) return escapeHtml(raw);
 
         const regex = new RegExp(
@@ -2340,34 +2515,63 @@
         el.innerHTML = highlightText(text || "", searchTextLower);
       }
 
-      function getBaseMatches(
-        activeFilters,
-        searchTextLower,
-        excludeFacetKey = null,
-      ) {
-        const t0 = performance.now();
+      function getBaseMatches(activeFilters, excludeFacetKey = null) {
+        const source =
+          latestSearchCandidateIndices.length > 0 || !getSearchTextLower()
+            ? latestSearchCandidateIndices
+            : ROWS.map((_, idx) => idx);
         const indices = [];
 
-        for (let i = 0; i < ROWS.length; i++) {
-          const row = ROWS[i];
-          if (!rowMatchesSearch(row, searchTextLower)) continue;
+        for (let i = 0; i < source.length; i++) {
+          const row = ROWS[source[i]];
           if (!rowMatchesFilters(row, activeFilters, excludeFacetKey)) continue;
-          indices.push(i);
+          indices.push(source[i]);
         }
-
-        console.debug(
-          `[perf] getBaseMatches(${excludeFacetKey || "none"}) -> ${indices.length} rows in ${(performance.now() - t0).toFixed(1)}ms`,
-        );
         return indices;
       }
 
       function getFilteredData(excludeFilter = null) {
-        const indices = getBaseMatches(
-          currentFilterSets,
-          getSearchTextLower(),
-          excludeFilter,
-        );
+        if (!excludeFilter) return latestFilteredRecords;
+        const indices = getBaseMatches(currentFilterSets, excludeFilter);
         return indices.map((i) => ROWS[i].record);
+      }
+
+      function runSearchPipeline() {
+        if (!searchWorkerReady || !searchWorker) {
+          latestSearchCandidateIndices = ROWS.map((_, idx) => idx);
+          latestFilteredRecords = ROWS.map((row) => row.record);
+          renderFilteredData(latestFilteredRecords, {
+            partial: false,
+            totalCount: latestFilteredRecords.length,
+          });
+          return;
+        }
+
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const filtersPayload = getFiltersPayload();
+        const cacheKey = getSearchCacheKey(searchTextLower, scopes, filtersPayload);
+
+        if (searchResultCache.has(cacheKey)) {
+          const cached = searchResultCache.get(cacheKey);
+          latestSearchCandidateIndices = cached.candidates || [];
+          latestFilteredRecords = cached.records || [];
+          renderFilteredData(latestFilteredRecords, {
+            partial: false,
+            totalCount: latestFilteredRecords.length,
+          });
+          return;
+        }
+
+        const requestId = ++lastSearchRequestId;
+        searchWorker._activeCacheKey = cacheKey;
+        searchWorker.postMessage({
+          type: "SEARCH",
+          requestId,
+          tokens: tokenizeSearchText(searchTextLower),
+          scopes,
+          filters: filtersPayload,
+        });
       }
 
       // ============================================================================
@@ -2713,7 +2917,7 @@
         }
       }
 
-      function renderFilteredData(records) {
+      function renderFilteredData(records, options = {}) {
         const t0 = performance.now();
         const app = document.getElementById("app");
         app.innerHTML = "";
@@ -2726,7 +2930,7 @@
 
         if (records.length === 0) {
           emptyStateEl.classList.remove("isHidden");
-          updateHeaderStats(records);
+          updateHeaderStats(records, options.totalCount ?? records.length);
           console.debug(
             `[perf] renderFilteredData: empty state in ${(performance.now() - t0).toFixed(1)}ms`,
           );
@@ -2734,12 +2938,17 @@
         }
 
         emptyStateEl.classList.add("isHidden");
-        updateHeaderStats(records);
+        updateHeaderStats(records, options.totalCount ?? records.length);
         renderNextBatch();
-        setupRenderObserver();
+
+        if (!options.partial) {
+          setupRenderObserver();
+        }
 
         console.debug(
-          `[perf] renderFilteredData: ${records.length} records prepared in ${(performance.now() - t0).toFixed(1)}ms`,
+          `[perf] renderFilteredData: ${records.length} records prepared in ${(performance.now() - t0).toFixed(1)}ms${
+            options.partial ? " (progressive-first-batch)" : ""
+          }`,
         );
       }
 
@@ -2751,17 +2960,17 @@
         }
         pendingFilterUpdate = requestAnimationFrame(() => {
           pendingFilterUpdate = null;
-          renderFilteredData(getFilteredData());
+          runSearchPipeline();
         });
       }
 
       // ============================================================================
       // HEADER STATS UPDATE
       // ============================================================================
-      function updateHeaderStats(filteredRecords = null) {
+      function updateHeaderStats(filteredRecords = null, totalCount = null) {
         const filtered = filteredRecords || getFilteredData();
         document.getElementById("count").textContent =
-          filtered.length.toString();
+          String(totalCount ?? filtered.length);
 
         const stats = stateManager.getStats();
         document.getElementById("attempted").textContent =
@@ -2912,7 +3121,8 @@
 
       function makeFacetCacheKey(facetKey) {
         const searchText = getSearchTextLower();
-        const parts = [facetKey, searchText];
+        const scopes = getEffectiveScopes();
+        const parts = [facetKey, searchText, `q:${Number(scopes.scopeQuestion)}`, `o:${Number(scopes.scopeOptions)}`, `e:${Number(scopes.scopeExplanation)}`];
         FACET_KEYS.forEach((k) => {
           if (k === facetKey) return;
           const vals = [...currentFilterSets[k]].sort();
@@ -2933,11 +3143,7 @@
           return facetPopupCache.values;
         }
 
-        const baseMatches = getBaseMatches(
-          currentFilterSets,
-          getSearchTextLower(),
-          facetKey,
-        );
+        const baseMatches = getBaseMatches(currentFilterSets, facetKey);
         const countsMap = new Map();
 
         for (let i = 0; i < baseMatches.length; i++) {
@@ -3214,6 +3420,7 @@
           if (hasChanges) {
             currentFilters[activeFilterType] = [...tempSelectionSet];
             rebuildFilterSets();
+            invalidateSearchCache("filters-changed");
             scheduleFilteredUpdate();
             updateFilterButtons();
           }
@@ -3393,6 +3600,7 @@
           searchSettings[key] = !searchSettings[key];
           saveSearchSettings();
           updateSearchScopeUI();
+          invalidateSearchCache("scope-changed");
           scheduleFilteredUpdate();
         });
       });
@@ -3403,6 +3611,7 @@
         searchSettings.scopeExplanation = true;
         saveSearchSettings();
         updateSearchScopeUI();
+        invalidateSearchCache("scope-changed");
         scheduleFilteredUpdate();
       });
 
@@ -3412,6 +3621,7 @@
         searchSettings.scopeExplanation = false;
         saveSearchSettings();
         updateSearchScopeUI();
+        invalidateSearchCache("scope-changed");
         scheduleFilteredUpdate();
       });
 
@@ -3576,7 +3786,7 @@
       grist.onRecords((records) => {
         const t0 = performance.now();
         DATA = (records || []).map(normalizeRecord);
-        ROWS = buildSearchBlobs(DATA);
+        ROWS = buildSearchRows(DATA);
         buildFacetValueUniverse();
 
         // Clear facet cache
@@ -3586,7 +3796,11 @@
 
         rebuildFilterSets();
         updateFilterButtons();
-        renderFilteredData(getFilteredData());
+        invalidateSearchCache("records-updated");
+        initSearchWorker(ROWS);
+        latestSearchCandidateIndices = ROWS.map((_, idx) => idx);
+        latestFilteredRecords = ROWS.map((row) => row.record);
+        scheduleFilteredUpdate();
 
         console.debug(
           `[perf] onRecords -> ${DATA.length} rows processed in ${(performance.now() - t0).toFixed(1)}ms`,
