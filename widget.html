@@ -2191,76 +2191,148 @@
 
       const SEARCH_WORKER_SCRIPT = `
         let rows = [];
-        let indexes = { question: new Map(), options: new Map(), explanation: new Map() };
+        let totalRows = 0;
+        const mutablePostings = new Map();
+        const ngramToTerms = new Map();
+        const compressedIndex = new Map();
+        const docFreq = new Map();
+        const decompressedCache = new Map();
 
         function tokenize(text) {
-          return Array.from(new Set(
-            String(text || "")
-              .toLowerCase()
-              .split(/[^\\p{L}\\p{N}]+/u)
-              .map((token) => token.trim())
-              .filter((token) => token.length > 1)
-          ));
+          return String(text || "")
+            .toLowerCase()
+            .split(/[^\p{L}\p{N}]+/u)
+            .map((token) => token.trim())
+            .filter((token) => token.length > 1);
         }
 
-        function addTokenPosting(indexMap, token, rowIndex) {
-          if (!indexMap.has(token)) indexMap.set(token, []);
-          indexMap.get(token).push(rowIndex);
+        function buildNgrams(token) {
+          const grams = [];
+          if (token.length < 3) return grams;
+          for (let i = 0; i <= token.length - 3; i++) {
+            grams.push(token.slice(i, i + 3));
+          }
+          return grams;
         }
 
-        function buildIndexes(payloadRows) {
-          rows = payloadRows;
-          indexes = { question: new Map(), options: new Map(), explanation: new Map() };
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            const scopeMap = {
-              question: row.searchScopes?.question || "",
-              options: row.searchScopes?.options || "",
-              explanation: row.searchScopes?.explanation || "",
-            };
-            for (const scope of Object.keys(scopeMap)) {
-              const tokens = tokenize(scopeMap[scope]);
-              for (const token of tokens) addTokenPosting(indexes[scope], token, i);
+        function addRowTerm(term, rowIndex, weight) {
+          if (!mutablePostings.has(term)) {
+            mutablePostings.set(term, new Map());
+          }
+          const posting = mutablePostings.get(term);
+          posting.set(rowIndex, (posting.get(rowIndex) || 0) + weight);
+        }
+
+        function appendRows(chunkRows, baseIndex) {
+          for (let i = 0; i < chunkRows.length; i++) {
+            const row = chunkRows[i];
+            const rowIndex = baseIndex + i;
+            rows[rowIndex] = row;
+
+            const weightedScopes = [
+              [row.searchScopes?.question || "", 3],
+              [row.searchScopes?.options || "", 2],
+              [row.searchScopes?.explanation || "", 1],
+            ];
+
+            for (const [text, weight] of weightedScopes) {
+              const tokens = tokenize(text);
+              for (const token of tokens) {
+                addRowTerm(token, rowIndex, weight);
+              }
             }
           }
+          totalRows = rows.length;
         }
 
-        function intersectSorted(a, b) {
-          let i = 0, j = 0;
+        function rleCompress(sortedIds) {
+          if (!sortedIds.length) return [];
+          const runs = [];
+          let runStart = sortedIds[0];
+          let runLength = 1;
+          for (let i = 1; i < sortedIds.length; i++) {
+            if (sortedIds[i] === sortedIds[i - 1] + 1) {
+              runLength += 1;
+            } else {
+              runs.push([runStart, runLength]);
+              runStart = sortedIds[i];
+              runLength = 1;
+            }
+          }
+          runs.push([runStart, runLength]);
+          return runs;
+        }
+
+        function rleExpand(runs) {
           const out = [];
-          while (i < a.length && j < b.length) {
-            if (a[i] === b[j]) { out.push(a[i]); i++; j++; }
-            else if (a[i] < b[j]) i++;
-            else j++;
+          for (let i = 0; i < runs.length; i++) {
+            const [start, len] = runs[i];
+            for (let j = 0; j < len; j++) {
+              out.push(start + j);
+            }
           }
           return out;
         }
 
-        function unionSorted(lists) {
-          const merged = new Set();
-          for (const list of lists) {
-            if (!list) continue;
-            for (const id of list) merged.add(id);
+        function finalizeIndex() {
+          compressedIndex.clear();
+          docFreq.clear();
+          ngramToTerms.clear();
+          decompressedCache.clear();
+
+          for (const [term, postingMap] of mutablePostings.entries()) {
+            const sortedIds = Array.from(postingMap.keys()).sort((a, b) => a - b);
+            const tfByRow = sortedIds.map((id) => postingMap.get(id) || 0);
+            const runs = rleCompress(sortedIds);
+            compressedIndex.set(term, { runs, tfByRow });
+            docFreq.set(term, sortedIds.length);
+
+            const grams = buildNgrams(term);
+            for (let i = 0; i < grams.length; i++) {
+              const gram = grams[i];
+              if (!ngramToTerms.has(gram)) ngramToTerms.set(gram, new Set());
+              ngramToTerms.get(gram).add(term);
+            }
           }
-          return Array.from(merged).sort((a, b) => a - b);
+
+          mutablePostings.clear();
         }
 
-        function buildSearchCandidates(tokens, scopes) {
-          if (!tokens.length) return rows.map((_, idx) => idx);
-          let candidates = null;
-          const activeScopes = [];
-          if (scopes.scopeQuestion) activeScopes.push("question");
-          if (scopes.scopeOptions) activeScopes.push("options");
-          if (scopes.scopeExplanation) activeScopes.push("explanation");
-          if (!activeScopes.length) activeScopes.push("question", "options", "explanation");
+        function getPosting(term) {
+          if (!compressedIndex.has(term)) return { rowIds: [], tfByRow: [] };
+          if (decompressedCache.has(term)) return decompressedCache.get(term);
 
-          for (const token of tokens) {
-            const tokenUnion = unionSorted(activeScopes.map((scope) => indexes[scope].get(token) || []));
-            if (!tokenUnion.length) return [];
-            candidates = candidates === null ? tokenUnion : intersectSorted(candidates, tokenUnion);
-            if (!candidates.length) return [];
+          const payload = compressedIndex.get(term);
+          const rowIds = rleExpand(payload.runs);
+          const posting = { rowIds, tfByRow: payload.tfByRow };
+          if (decompressedCache.size > 256) {
+            const first = decompressedCache.keys().next().value;
+            decompressedCache.delete(first);
           }
-          return candidates || [];
+          decompressedCache.set(term, posting);
+          return posting;
+        }
+
+        function getCandidateTerms(queryToken) {
+          if (compressedIndex.has(queryToken)) return [queryToken];
+          const grams = buildNgrams(queryToken);
+          if (!grams.length) return [];
+
+          let candidates = null;
+          for (let i = 0; i < grams.length; i++) {
+            const gramTerms = ngramToTerms.get(grams[i]);
+            if (!gramTerms) return [];
+            if (candidates === null) {
+              candidates = new Set(gramTerms);
+            } else {
+              for (const term of Array.from(candidates)) {
+                if (!gramTerms.has(term)) candidates.delete(term);
+              }
+            }
+            if (!candidates.size) return [];
+          }
+
+          return Array.from(candidates).filter((term) => term.includes(queryToken)).slice(0, 32);
         }
 
         function rowMatchesFilters(row, filters) {
@@ -2272,28 +2344,113 @@
           return true;
         }
 
+        function applyScopeWeight(term, rowIndex, scopes) {
+          const row = rows[rowIndex];
+          const inQuestion = (row.searchScopes?.question || "").toLowerCase().includes(term);
+          const inOptions = (row.searchScopes?.options || "").toLowerCase().includes(term);
+          const inExplanation = (row.searchScopes?.explanation || "").toLowerCase().includes(term);
+
+          const qActive = !!scopes.scopeQuestion;
+          const oActive = !!scopes.scopeOptions;
+          const eActive = !!scopes.scopeExplanation;
+          const hasActiveScope = qActive || oActive || eActive;
+
+          if (!hasActiveScope) return inQuestion || inOptions || inExplanation ? 1 : 0;
+
+          let score = 0;
+          if (qActive && inQuestion) score += 3;
+          if (oActive && inOptions) score += 2;
+          if (eActive && inExplanation) score += 1;
+          return score;
+        }
+
         function runSearch(payload) {
           const { requestId, tokens, scopes, filters } = payload;
-          const candidates = buildSearchCandidates(tokens, scopes);
-          let firstBatch = [];
-          const allMatches = [];
+          const t0 = performance.now();
 
-          for (let i = 0; i < candidates.length; i++) {
-            const idx = candidates[i];
-            if (!rowMatchesFilters(rows[idx], filters)) continue;
-            allMatches.push(idx);
-            if (firstBatch.length < 50) firstBatch.push(idx);
+          if (!tokens.length) {
+            const all = [];
+            for (let i = 0; i < rows.length; i++) {
+              if (rowMatchesFilters(rows[i], filters)) all.push(i);
+            }
+            const firstBatch = all.slice(0, 50);
+            postMessage({ type: "FIRST_BATCH", requestId, indices: firstBatch, count: all.length, candidates: all, elapsedMs: performance.now() - t0 });
+            postMessage({ type: "SEARCH_DONE", requestId, indices: all, count: all.length, candidates: all, elapsedMs: performance.now() - t0 });
+            return;
           }
 
-          postMessage({ type: "FIRST_BATCH", requestId, indices: firstBatch, count: allMatches.length, candidates });
-          postMessage({ type: "SEARCH_DONE", requestId, indices: allMatches, count: allMatches.length, candidates });
+          const scoreMap = new Map();
+          const tokenHits = new Map();
+
+          for (let tokenIdx = 0; tokenIdx < tokens.length; tokenIdx++) {
+            const token = tokens[tokenIdx];
+            const terms = getCandidateTerms(token);
+            if (!terms.length) {
+              postMessage({ type: "FIRST_BATCH", requestId, indices: [], count: 0, candidates: [], elapsedMs: performance.now() - t0 });
+              postMessage({ type: "SEARCH_DONE", requestId, indices: [], count: 0, candidates: [], elapsedMs: performance.now() - t0 });
+              return;
+            }
+
+            const seenForToken = new Set();
+            for (let termIdx = 0; termIdx < terms.length; termIdx++) {
+              const term = terms[termIdx];
+              const posting = getPosting(term);
+              const df = docFreq.get(term) || 1;
+              const idf = Math.log(1 + (rows.length / df));
+
+              for (let i = 0; i < posting.rowIds.length; i++) {
+                const rowIndex = posting.rowIds[i];
+                const tf = posting.tfByRow[i] || 1;
+                if (!rowMatchesFilters(rows[rowIndex], filters)) continue;
+                const scopeBoost = applyScopeWeight(term, rowIndex, scopes);
+                if (!scopeBoost) continue;
+                scoreMap.set(rowIndex, (scoreMap.get(rowIndex) || 0) + tf * idf * scopeBoost);
+                seenForToken.add(rowIndex);
+              }
+            }
+
+            for (const rowIndex of seenForToken) {
+              tokenHits.set(rowIndex, (tokenHits.get(rowIndex) || 0) + 1);
+            }
+          }
+
+          const requiredTokens = tokens.length;
+          const ranked = [];
+          for (const [rowIndex, score] of scoreMap.entries()) {
+            if ((tokenHits.get(rowIndex) || 0) < requiredTokens) continue;
+            ranked.push([rowIndex, score]);
+          }
+
+          ranked.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+          const indices = ranked.map((entry) => entry[0]);
+          const firstBatch = indices.slice(0, 50);
+
+          postMessage({ type: "FIRST_BATCH", requestId, indices: firstBatch, count: indices.length, candidates: indices, elapsedMs: performance.now() - t0 });
+          postMessage({ type: "SEARCH_DONE", requestId, indices, count: indices.length, candidates: indices, elapsedMs: performance.now() - t0 });
         }
 
         self.onmessage = (event) => {
           const payload = event.data || {};
-          if (payload.type === "INIT") {
-            buildIndexes(payload.rows || []);
-            postMessage({ type: "INIT_DONE", count: rows.length });
+          if (payload.type === "RESET_INDEX") {
+            rows = [];
+            totalRows = 0;
+            mutablePostings.clear();
+            compressedIndex.clear();
+            docFreq.clear();
+            ngramToTerms.clear();
+            decompressedCache.clear();
+            postMessage({ type: "RESET_DONE" });
+            return;
+          }
+          if (payload.type === "APPEND_ROWS") {
+            appendRows(payload.rows || [], payload.baseIndex || 0);
+            postMessage({ type: "APPEND_DONE", count: totalRows });
+            return;
+          }
+          if (payload.type === "FINALIZE_INDEX") {
+            const t0 = performance.now();
+            finalizeIndex();
+            postMessage({ type: "INDEX_READY", count: rows.length, elapsedMs: performance.now() - t0, terms: compressedIndex.size });
             return;
           }
           if (payload.type === "SEARCH") runSearch(payload);
@@ -2303,6 +2460,7 @@
       let searchWorker = null;
       let searchWorkerReady = false;
       let lastSearchRequestId = 0;
+      let activeSearchCacheKey = "";
       let latestSearchCandidateIndices = [];
       let latestFilteredRecords = [];
       const searchResultCache = new Map();
@@ -2339,9 +2497,13 @@
         searchWorkerReady = false;
         searchWorker.onmessage = (event) => {
           const payload = event.data || {};
-          if (payload.type === "INIT_DONE") {
+
+          if (payload.type === "INDEX_READY") {
             searchWorkerReady = true;
-            console.debug(`[perf] search worker initialized (${payload.count} rows)`);
+            console.debug(
+              `[perf] search worker indexed ${payload.count} rows, ${payload.terms} terms in ${(payload.elapsedMs || 0).toFixed(1)}ms`,
+            );
+            scheduleFilteredUpdate();
             return;
           }
 
@@ -2351,7 +2513,10 @@
             const firstBatchRecords = (payload.indices || []).map((idx) => ROWS[idx].record);
             latestSearchCandidateIndices = payload.candidates || [];
             latestFilteredRecords = firstBatchRecords;
-            renderFilteredData(firstBatchRecords, { partial: true, totalCount: payload.count || firstBatchRecords.length });
+            renderFilteredData(firstBatchRecords, {
+              partial: true,
+              totalCount: payload.count || firstBatchRecords.length,
+            });
             return;
           }
 
@@ -2359,18 +2524,42 @@
             const allRecords = (payload.indices || []).map((idx) => ROWS[idx].record);
             latestSearchCandidateIndices = payload.candidates || [];
             latestFilteredRecords = allRecords;
-            const cacheKey = searchWorker._activeCacheKey;
-            if (cacheKey) {
-              searchResultCache.set(cacheKey, {
+            if (activeSearchCacheKey) {
+              searchResultCache.set(activeSearchCacheKey, {
                 records: allRecords,
                 candidates: latestSearchCandidateIndices,
               });
             }
-            renderFilteredData(allRecords, { partial: false, totalCount: payload.count || allRecords.length });
+            renderFilteredData(allRecords, {
+              partial: false,
+              totalCount: payload.count || allRecords.length,
+            });
           }
         };
 
-        searchWorker.postMessage({ type: "INIT", rows });
+        searchWorker.postMessage({ type: "RESET_INDEX" });
+
+        const chunkSize = 400;
+        let cursor = 0;
+        function appendNextChunk() {
+          const end = Math.min(cursor + chunkSize, rows.length);
+          const chunk = rows.slice(cursor, end);
+          if (chunk.length) {
+            searchWorker.postMessage({
+              type: "APPEND_ROWS",
+              baseIndex: cursor,
+              rows: chunk,
+            });
+          }
+          cursor = end;
+          if (cursor < rows.length) {
+            requestAnimationFrame(appendNextChunk);
+          } else {
+            searchWorker.postMessage({ type: "FINALIZE_INDEX" });
+          }
+        }
+
+        requestAnimationFrame(appendNextChunk);
       }
 
       // ============================================================================
@@ -2564,7 +2753,7 @@
         }
 
         const requestId = ++lastSearchRequestId;
-        searchWorker._activeCacheKey = cacheKey;
+        activeSearchCacheKey = cacheKey;
         searchWorker.postMessage({
           type: "SEARCH",
           requestId,
