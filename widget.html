@@ -2488,6 +2488,60 @@
         ].join("||");
       }
 
+      function fallbackSearchEvaluation(tokens, scopes, filters) {
+        const candidates = [];
+        const matches = [];
+
+        const hasScope =
+          !!scopes.scopeQuestion ||
+          !!scopes.scopeOptions ||
+          !!scopes.scopeExplanation;
+
+        for (let i = 0; i < ROWS.length; i++) {
+          const row = ROWS[i];
+          const qText = (row.searchScopes?.question || "").toLowerCase();
+          const oText = (row.searchScopes?.options || "").toLowerCase();
+          const eText = (row.searchScopes?.explanation || "").toLowerCase();
+
+          let tokenMatch = true;
+          for (let t = 0; t < tokens.length; t++) {
+            const token = tokens[t];
+            let inScope = false;
+
+            if (!hasScope) {
+              inScope =
+                qText.includes(token) ||
+                oText.includes(token) ||
+                eText.includes(token);
+            } else {
+              if (scopes.scopeQuestion && qText.includes(token)) inScope = true;
+              if (scopes.scopeOptions && oText.includes(token)) inScope = true;
+              if (scopes.scopeExplanation && eText.includes(token)) inScope = true;
+            }
+
+            if (!inScope) {
+              tokenMatch = false;
+              break;
+            }
+          }
+
+          if (!tokenMatch) continue;
+          candidates.push(i);
+
+          if (
+            (filters.exam.length === 0 || filters.exam.includes(row.exam)) &&
+            (filters.year.length === 0 || filters.year.includes(row.year)) &&
+            (filters.subject.length === 0 || filters.subject.includes(row.subject)) &&
+            (filters.theme.length === 0 || filters.theme.includes(row.theme)) &&
+            (filters.topic.length === 0 || filters.topic.includes(row.topic))
+          ) {
+            matches.push(i);
+          }
+        }
+
+        return { candidates, matches };
+      }
+
       function initSearchWorker(rows) {
         if (searchWorker) {
           searchWorker.terminate();
@@ -2528,8 +2582,27 @@
           }
 
           if (payload.type === "SEARCH_DONE") {
-            const allRecords = (payload.indices || []).map((idx) => ROWS[idx].record);
-            latestSearchCandidateIndices = payload.candidates || [];
+            let finalIndices = payload.indices || [];
+            let candidateIndices = payload.candidates || [];
+
+            const queryTokens = tokenizeSearchText(getSearchTextLower());
+            if (queryTokens.length > 0 && finalIndices.length === 0) {
+              const fallback = fallbackSearchEvaluation(
+                queryTokens,
+                getEffectiveScopes(),
+                getFiltersPayload(),
+              );
+              if (fallback.matches.length > 0 || fallback.candidates.length > 0) {
+                finalIndices = fallback.matches;
+                candidateIndices = fallback.candidates;
+                console.warn(
+                  `[perf] worker returned 0; fallback search recovered ${finalIndices.length} matches`,
+                );
+              }
+            }
+
+            const allRecords = finalIndices.map((idx) => ROWS[idx].record);
+            latestSearchCandidateIndices = candidateIndices;
             latestFilteredRecords = allRecords;
             if (activeSearchCacheKey) {
               searchResultCache.set(activeSearchCacheKey, {
@@ -2539,7 +2612,7 @@
             }
             renderFilteredData(allRecords, {
               partial: false,
-              totalCount: payload.count || allRecords.length,
+              totalCount: finalIndices.length,
             });
           }
         };
