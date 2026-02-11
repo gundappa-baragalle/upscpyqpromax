@@ -2996,6 +2996,7 @@
         if (records.length === 0) {
           emptyStateEl.classList.remove("isHidden");
           updateHeaderStats(records, options.totalCount ?? records.length);
+          updateFilterButtons();
           console.debug(
             `[perf] renderFilteredData: empty state in ${(performance.now() - t0).toFixed(1)}ms`,
           );
@@ -3004,6 +3005,7 @@
 
         emptyStateEl.classList.add("isHidden");
         updateHeaderStats(records, options.totalCount ?? records.length);
+        updateFilterButtons();
         renderNextBatch();
 
         if (!options.partial) {
