@@ -2304,11 +2304,14 @@
       let searchWorkerReady = false;
       let lastSearchRequestId = 0;
       let latestSearchCandidateIndices = [];
+      let latestSearchCandidatesKey = null;
       let latestFilteredRecords = [];
       const searchResultCache = new Map();
+      let ALL_ROW_INDICES = [];
 
       function invalidateSearchCache(reason = "unknown") {
         searchResultCache.clear();
+        latestSearchCandidatesKey = null;
         console.debug(`[perf] search cache invalidated (${reason})`);
       }
 
@@ -2322,6 +2325,15 @@
           `o:${Number(scopes.scopeOptions)}`,
           `e:${Number(scopes.scopeExplanation)}`,
           filterKey,
+        ].join("||");
+      }
+
+      function getSearchCandidatesKey(searchTextLower, scopes) {
+        return [
+          searchTextLower,
+          `q:${Number(scopes.scopeQuestion)}`,
+          `o:${Number(scopes.scopeOptions)}`,
+          `e:${Number(scopes.scopeExplanation)}`,
         ].join("||");
       }
 
@@ -2356,6 +2368,7 @@
               (idx) => ROWS[idx].record,
             );
             latestSearchCandidateIndices = payload.candidates || [];
+            latestSearchCandidatesKey = searchWorker._activeCandidatesKey || null;
             latestFilteredRecords = firstBatchRecords;
             renderFilteredData(firstBatchRecords, {
               partial: true,
@@ -2369,6 +2382,7 @@
               (idx) => ROWS[idx].record,
             );
             latestSearchCandidateIndices = payload.candidates || [];
+            latestSearchCandidatesKey = searchWorker._activeCandidatesKey || null;
             latestFilteredRecords = allRecords;
             const cacheKey = searchWorker._activeCacheKey;
             if (cacheKey) {
@@ -2530,10 +2544,17 @@
       }
 
       function getBaseMatches(activeFilters, excludeFacetKey = null) {
-        const source =
-          latestSearchCandidateIndices.length > 0 || !getSearchTextLower()
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const expectedCandidatesKey = getSearchCandidatesKey(
+          searchTextLower,
+          scopes,
+        );
+        const source = !searchTextLower
+          ? ALL_ROW_INDICES
+          : latestSearchCandidatesKey === expectedCandidatesKey
             ? latestSearchCandidateIndices
-            : ROWS.map((_, idx) => idx);
+            : [];
         const indices = [];
 
         for (let i = 0; i < source.length; i++) {
@@ -2551,8 +2572,13 @@
       }
 
       function runSearchPipeline() {
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const candidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
+
         if (!searchWorkerReady || !searchWorker) {
-          latestSearchCandidateIndices = ROWS.map((_, idx) => idx);
+          latestSearchCandidateIndices = ALL_ROW_INDICES;
+          latestSearchCandidatesKey = searchTextLower ? null : candidatesKey;
           latestFilteredRecords = ROWS.map((row) => row.record);
           renderFilteredData(latestFilteredRecords, {
             partial: false,
@@ -2561,8 +2587,6 @@
           return;
         }
 
-        const searchTextLower = getSearchTextLower();
-        const scopes = getEffectiveScopes();
         const filtersPayload = getFiltersPayload();
         const cacheKey = getSearchCacheKey(
           searchTextLower,
@@ -2573,6 +2597,7 @@
         if (searchResultCache.has(cacheKey)) {
           const cached = searchResultCache.get(cacheKey);
           latestSearchCandidateIndices = cached.candidates || [];
+          latestSearchCandidatesKey = candidatesKey;
           latestFilteredRecords = cached.records || [];
           renderFilteredData(latestFilteredRecords, {
             partial: false,
@@ -2583,6 +2608,7 @@
 
         const requestId = ++lastSearchRequestId;
         searchWorker._activeCacheKey = cacheKey;
+        searchWorker._activeCandidatesKey = candidatesKey;
         searchWorker.postMessage({
           type: "SEARCH",
           requestId,
@@ -3812,6 +3838,7 @@
         const t0 = performance.now();
         DATA = (records || []).map(normalizeRecord);
         ROWS = buildSearchRows(DATA);
+        ALL_ROW_INDICES = ROWS.map((_, idx) => idx);
         buildFacetValueUniverse();
 
         // Clear facet cache
@@ -3823,7 +3850,8 @@
         updateFilterButtons();
         invalidateSearchCache("records-updated");
         initSearchWorker(ROWS);
-        latestSearchCandidateIndices = ROWS.map((_, idx) => idx);
+        latestSearchCandidateIndices = ALL_ROW_INDICES;
+        latestSearchCandidatesKey = null;
         latestFilteredRecords = ROWS.map((row) => row.record);
         scheduleFilteredUpdate();
 
