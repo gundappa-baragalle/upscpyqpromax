@@ -2402,6 +2402,7 @@
       function invalidateSearchCache(reason = "unknown") {
         searchResultCache.clear();
         latestSearchCandidatesKey = null;
+        facetCountsCache.key = "";
         debugLog(`[perf] search cache invalidated (${reason})`);
       }
 
@@ -3270,10 +3271,15 @@
         topic: 0,
       };
 
-      const facetPopupCache = {
+      const facetCountsCache = {
         key: "",
-        facetKey: "",
-        values: [],
+        byFacet: {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        },
       };
 
       const filterLabels = {
@@ -3380,61 +3386,62 @@
         return (currentIndex + 1) % cycle.length;
       }
 
-      function makeFacetCacheKey(facetKey) {
-        const searchText = getSearchTextLower();
-        const scopes = getEffectiveScopes();
-        const parts = [
-          facetKey,
-          searchText,
-          `q:${Number(scopes.scopeQuestion)}`,
-          `o:${Number(scopes.scopeOptions)}`,
-          `e:${Number(scopes.scopeExplanation)}`,
-        ];
-        FACET_KEYS.forEach((k) => {
-          if (k === facetKey) return;
+      function makeFacetCountsStateKey() {
+        const searchKey = latestSearchCandidatesKey || "__search_pending__";
+        const filterKey = FACET_KEYS.map((k) => {
           const vals = [...currentFilterSets[k]].sort();
-          parts.push(`${k}:${vals.join("|")}`);
+          return `${k}:${vals.join("|")}`;
+        }).join("::");
+        return `${searchKey}||${filterKey}`;
+      }
+
+      function computeAllFacetCountsForState() {
+        const stateKey = makeFacetCountsStateKey();
+        if (facetCountsCache.key === stateKey) {
+          debugLog(`[perf] facetCountsCache: hit`);
+          return facetCountsCache.byFacet;
+        }
+
+        const t0 = performance.now();
+        const byFacet = {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        };
+
+        FACET_KEYS.forEach((facetKey) => {
+          const baseMatches = getBaseMatches(currentFilterSets, facetKey);
+          const countsMap = new Map();
+
+          for (let i = 0; i < baseMatches.length; i++) {
+            const row = ROWS[baseMatches[i]];
+            const value = row[facetKey] || "";
+            if (!value) continue;
+            countsMap.set(value, (countsMap.get(value) || 0) + 1);
+          }
+
+          const universe = facetValueUniverse[facetKey] || [];
+          byFacet[facetKey] = universe.map((value, idx) => ({
+            idx: idx + 1,
+            value,
+            count: countsMap.get(value) || 0,
+          }));
         });
-        return parts.join("::");
+
+        facetCountsCache.key = stateKey;
+        facetCountsCache.byFacet = byFacet;
+
+        debugLog(
+          `[perf] computeAllFacetCountsForState in ${(performance.now() - t0).toFixed(1)}ms`,
+        );
+
+        return byFacet;
       }
 
       function computeFacetCounts(facetKey) {
-        const t0 = performance.now();
-        const key = makeFacetCacheKey(facetKey);
-
-        if (
-          facetPopupCache.key === key &&
-          facetPopupCache.facetKey === facetKey
-        ) {
-          debugLog(`[perf] computeFacetCounts: cache hit`);
-          return facetPopupCache.values;
-        }
-
-        const baseMatches = getBaseMatches(currentFilterSets, facetKey);
-        const countsMap = new Map();
-
-        for (let i = 0; i < baseMatches.length; i++) {
-          const row = ROWS[baseMatches[i]];
-          const value = row[facetKey] || "";
-          if (!value) continue;
-          countsMap.set(value, (countsMap.get(value) || 0) + 1);
-        }
-
-        const universe = facetValueUniverse[facetKey] || [];
-        const values = universe.map((value, idx) => ({
-          idx: idx + 1,
-          value,
-          count: countsMap.get(value) || 0,
-        }));
-
-        facetPopupCache.key = key;
-        facetPopupCache.facetKey = facetKey;
-        facetPopupCache.values = values;
-
-        debugLog(
-          `[perf] computeFacetCounts(${facetKey}) in ${(performance.now() - t0).toFixed(1)}ms`,
-        );
-        return values;
+        return computeAllFacetCountsForState()[facetKey] || [];
       }
 
       function sortPopupValues(values) {
@@ -4099,9 +4106,14 @@
         buildFacetValueUniverse();
 
         // Clear facet cache
-        facetPopupCache.key = "";
-        facetPopupCache.facetKey = "";
-        facetPopupCache.values = [];
+        facetCountsCache.key = "";
+        facetCountsCache.byFacet = {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        };
 
         rebuildFilterSets();
         updateFilterButtons();
