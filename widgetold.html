@@ -2221,6 +2221,9 @@
         dumpMetrics: dumpPerfMetrics,
         runQuickBenchmark,
       };
+      globalThis.__perfHelpers = window.__perfHelpers;
+      var __perfHelpers = window.__perfHelpers;
+
       let searchSettings = {
         scopeQuestion: true,
         scopeOptions: true,
