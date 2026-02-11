@@ -2088,6 +2088,7 @@
         workerQueryTimes: [],
         facetOpenTimes: [],
         renderBatchTimes: [],
+        facetComputeTimes: [],
       };
       window.__perfMetrics = perfMetrics;
 
@@ -2102,6 +2103,124 @@
         arr.push(value);
         if (arr.length > 100) arr.shift();
       }
+
+      function median(values) {
+        if (!values || !values.length) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        if (sorted.length % 2 === 0) {
+          return (sorted[mid - 1] + sorted[mid]) / 2;
+        }
+        return sorted[mid];
+      }
+
+      function percentile(values, p = 95) {
+        if (!values || !values.length) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const idx = Math.max(
+          0,
+          Math.min(
+            sorted.length - 1,
+            Math.ceil((p / 100) * sorted.length) - 1,
+          ),
+        );
+        return sorted[idx];
+      }
+
+      function dumpPerfMetrics() {
+        const keys = [
+          "searchLatencies",
+          "facetOpenTimes",
+          "renderBatchTimes",
+          "workerQueryTimes",
+          "facetComputeTimes",
+        ];
+        const output = {};
+        keys.forEach((key) => {
+          const values = perfMetrics[key] || [];
+          output[key] = {
+            count: values.length,
+            median: Number(median(values).toFixed(2)),
+            p95: Number(percentile(values, 95).toFixed(2)),
+          };
+        });
+        console.table(output);
+        return output;
+      }
+
+      function resetPerfMetrics() {
+        Object.keys(perfMetrics).forEach((key) => {
+          perfMetrics[key] = [];
+        });
+      }
+
+      async function runQuickBenchmark() {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const searchInput = document.getElementById("clientSearch");
+        const filterButtons = Array.from(document.querySelectorAll(".filterButton"));
+        if (!searchInput || !filterButtons.length) {
+          console.warn("Benchmark skipped: missing required UI controls");
+          return dumpPerfMetrics();
+        }
+
+        const queries = [
+          "fiscal policy",
+          "macro micro",
+          "inflation trade",
+          "topic 12",
+          "zzzz-no-hit",
+        ];
+
+        const runSearches = async () => {
+          for (const query of queries) {
+            searchInput.value = query;
+            searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+            await wait(360);
+          }
+        };
+
+        const openCloseFacets = async () => {
+          const filterCancelBtn = document.getElementById("filterCancel");
+          for (let i = 0; i < Math.min(5, filterButtons.length); i++) {
+            filterButtons[i].click();
+            await wait(220);
+            if (filterCancelBtn) filterCancelBtn.click();
+            await wait(160);
+          }
+        };
+
+        const toggleSingleFilter = async () => {
+          const firstBtn = filterButtons[0];
+          if (!firstBtn) return;
+          firstBtn.click();
+          await wait(220);
+          const firstToggle = document.querySelector(".filterItemToggle");
+          if (firstToggle) {
+            firstToggle.click();
+            await wait(120);
+            firstToggle.click();
+            await wait(120);
+          }
+          const applyBtn = document.getElementById("filterApply");
+          const cancelBtn = document.getElementById("filterCancel");
+          if (applyBtn) applyBtn.click();
+          else if (cancelBtn) cancelBtn.click();
+          await wait(220);
+        };
+
+        await runSearches();
+        await openCloseFacets();
+        await toggleSingleFilter();
+        await runSearches();
+
+        return dumpPerfMetrics();
+      }
+
+      window.__perfHelpers = {
+        resetMetrics: resetPerfMetrics,
+        dumpMetrics: dumpPerfMetrics,
+        runQuickBenchmark,
+      };
       let searchSettings = {
         scopeQuestion: true,
         scopeOptions: true,
@@ -3433,8 +3552,10 @@
         facetCountsCache.key = stateKey;
         facetCountsCache.byFacet = byFacet;
 
+        const facetComputeMs = performance.now() - t0;
+        recordPerfMetric("facetComputeTimes", facetComputeMs);
         debugLog(
-          `[perf] computeAllFacetCountsForState in ${(performance.now() - t0).toFixed(1)}ms`,
+          `[perf] computeAllFacetCountsForState in ${facetComputeMs.toFixed(1)}ms`,
         );
 
         return byFacet;
@@ -3728,6 +3849,25 @@
       }
 
       function updateFilterButtons() {
+        const allFacetCounts = computeAllFacetCountsForState();
+        const countMapByFacet = {
+          exam: new Map(
+            (allFacetCounts.exam || []).map((item) => [item.value, item.count || 0]),
+          ),
+          year: new Map(
+            (allFacetCounts.year || []).map((item) => [item.value, item.count || 0]),
+          ),
+          subject: new Map(
+            (allFacetCounts.subject || []).map((item) => [item.value, item.count || 0]),
+          ),
+          theme: new Map(
+            (allFacetCounts.theme || []).map((item) => [item.value, item.count || 0]),
+          ),
+          topic: new Map(
+            (allFacetCounts.topic || []).map((item) => [item.value, item.count || 0]),
+          ),
+        };
+
         document.querySelectorAll(".filterButton").forEach((btn) => {
           const type = btn.dataset.filter;
           const selectedValues = currentFilters[type] || [];
@@ -3736,16 +3876,10 @@
           if (countEl) countEl.textContent = count.toString();
           btn.classList.toggle("hasSelection", count > 0);
 
-          let hasZeroMatchSelection = false;
-          if (count > 0) {
-            const facetValues = computeFacetCounts(type);
-            const countMap = new Map(
-              facetValues.map((item) => [item.value, item.count || 0]),
-            );
-            hasZeroMatchSelection = selectedValues.some(
-              (value) => (countMap.get(value) || 0) === 0,
-            );
-          }
+          const countMap = countMapByFacet[type] || new Map();
+          const hasZeroMatchSelection =
+            count > 0 &&
+            selectedValues.some((value) => (countMap.get(value) || 0) === 0);
           btn.classList.toggle("hasZeroMatchSelection", hasZeroMatchSelection);
         });
       }
