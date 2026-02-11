@@ -2593,18 +2593,76 @@
         return indices.map((i) => ROWS[i].record);
       }
 
+      function buildFallbackSearchCandidates(searchTextLower, scopes) {
+        const tokens = tokenizeSearchText(searchTextLower);
+        if (!tokens.length) return ALL_ROW_INDICES;
+
+        const activeScopes = [];
+        if (scopes.scopeQuestion) activeScopes.push("question");
+        if (scopes.scopeOptions) activeScopes.push("options");
+        if (scopes.scopeExplanation) activeScopes.push("explanation");
+        if (!activeScopes.length)
+          activeScopes.push("question", "options", "explanation");
+
+        const indices = [];
+        for (let i = 0; i < ROWS.length; i++) {
+          const row = ROWS[i];
+          const questionText = (row.searchScopes?.question || "").toLowerCase();
+          const optionsText = (row.searchScopes?.options || "").toLowerCase();
+          const explanationText = (
+            row.searchScopes?.explanation || ""
+          ).toLowerCase();
+
+          const tokenFoundInActiveScope = (token) => {
+            if (activeScopes.includes("question") && questionText.includes(token))
+              return true;
+            if (activeScopes.includes("options") && optionsText.includes(token))
+              return true;
+            if (
+              activeScopes.includes("explanation") &&
+              explanationText.includes(token)
+            )
+              return true;
+            return false;
+          };
+
+          let match = true;
+          for (let t = 0; t < tokens.length; t++) {
+            if (!tokenFoundInActiveScope(tokens[t])) {
+              match = false;
+              break;
+            }
+          }
+
+          if (match) indices.push(i);
+        }
+
+        return indices;
+      }
+
       function runSearchPipeline() {
         const searchTextLower = getSearchTextLower();
         const scopes = getEffectiveScopes();
         const candidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
 
         if (!searchWorkerReady || !searchWorker) {
-          latestSearchCandidateIndices = ALL_ROW_INDICES;
-          latestSearchCandidatesKey = searchTextLower ? null : candidatesKey;
-          latestFilteredRecords = ROWS.map((row) => row.record);
-          renderFilteredData(latestFilteredRecords, {
+          const fallbackCandidates = buildFallbackSearchCandidates(
+            searchTextLower,
+            scopes,
+          );
+          const fallbackFiltered = [];
+          for (let i = 0; i < fallbackCandidates.length; i++) {
+            const idx = fallbackCandidates[i];
+            if (!rowMatchesFilters(ROWS[idx], currentFilterSets)) continue;
+            fallbackFiltered.push(ROWS[idx].record);
+          }
+
+          latestSearchCandidateIndices = fallbackCandidates;
+          latestSearchCandidatesKey = candidatesKey;
+          latestFilteredRecords = fallbackFiltered;
+          renderFilteredData(fallbackFiltered, {
             partial: false,
-            totalCount: latestFilteredRecords.length,
+            totalCount: fallbackFiltered.length,
           });
           return;
         }
