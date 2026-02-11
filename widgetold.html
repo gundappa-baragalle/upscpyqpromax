@@ -238,6 +238,12 @@
         box-shadow: 0 0 0 1px var(--accent-soft);
       }
 
+      .filterButton.hasZeroMatchSelection .count {
+        background: rgba(248, 81, 73, 0.2);
+        border-color: rgba(248, 81, 73, 0.8);
+        color: #ffb4ad;
+      }
+
       .filterButton:hover {
         transform: translateY(-1px);
         background: var(--bg-card);
@@ -495,6 +501,21 @@
         box-shadow:
           0 0 0 4px rgba(63, 185, 80, 0.2),
           0 4px 8px rgba(63, 185, 80, 0.3);
+      }
+
+      .filterItemToggle.warningZeroMatch {
+        border: 2px solid #f85149;
+      }
+
+      .filterItemToggle.active.warningZeroMatch {
+        border-color: #f85149;
+        box-shadow:
+          0 0 0 4px rgba(248, 81, 73, 0.2),
+          0 4px 8px rgba(248, 81, 73, 0.25);
+      }
+
+      .filterItemCount.warningZeroMatch {
+        color: #ff7b72;
       }
 
       .filterSectionDivider {
@@ -3292,13 +3313,15 @@
         filterPopupTitle.textContent = `Filter: ${filterLabels[activeFilterType] || activeFilterType}`;
 
         const values = computeFacetCounts(activeFilterType);
-        const nonZeroValues = values.filter((item) => item.count > 0);
+        const displayableValues = values.filter(
+          (item) => item.count > 0 || tempSelectionSet.has(item.value),
+        );
         const query = popupSearchQuery.trim().toLowerCase();
         const filteredValues = query
-          ? nonZeroValues.filter((item) =>
+          ? displayableValues.filter((item) =>
               item.value.toLowerCase().includes(query),
             )
-          : nonZeroValues;
+          : displayableValues;
 
         const selectedValues = filteredValues.filter((item) =>
           tempSelectionSet.has(item.value),
@@ -3313,7 +3336,7 @@
           ...sortedUnselectedValues,
         ];
 
-        updatePopupHeaderCounts(nonZeroValues);
+        updatePopupHeaderCounts(filteredValues);
 
         if (allFacetValues.length === 0) {
           filterPopupList.innerHTML = `<div class="muted">No values found.</div>`;
@@ -3337,7 +3360,9 @@
           toggle.type = "button";
           toggle.dataset.value = item.value;
           const isActive = tempSelectionSet.has(item.value);
+          const isZeroSelected = isActive && item.count === 0;
           toggle.classList.toggle("active", isActive);
+          toggle.classList.toggle("warningZeroMatch", isZeroSelected);
           toggle.textContent = isActive ? "✓" : "+";
 
           const label = document.createElement("div");
@@ -3346,6 +3371,7 @@
 
           const countEl = document.createElement("div");
           countEl.className = "filterItemCount";
+          countEl.classList.toggle("warningZeroMatch", isZeroSelected);
           countEl.textContent = item.count.toString();
 
           row.appendChild(toggle);
@@ -3365,19 +3391,20 @@
       function updatePopupHeaderCounts(values) {
         if (!filterPopupTotal) return;
 
-        let availableItems = 0;
+        let availableItems = values.length;
         let totalMatches = 0;
         let selectedMatches = 0;
+        let selectedItems = 0;
 
         for (let i = 0; i < values.length; i++) {
           const item = values[i];
           const count = item.count || 0;
           totalMatches += count;
-          if (count > 0) availableItems++;
-          if (tempSelectionSet.has(item.value)) selectedMatches += count;
+          if (tempSelectionSet.has(item.value)) {
+            selectedItems++;
+            selectedMatches += count;
+          }
         }
-
-        const selectedItems = tempSelectionSet.size;
         const filterPercentRaw =
           availableItems > 0
             ? Math.min(100, (selectedItems / availableItems) * 100)
@@ -3487,10 +3514,23 @@
       function updateFilterButtons() {
         document.querySelectorAll(".filterButton").forEach((btn) => {
           const type = btn.dataset.filter;
-          const count = currentFilters[type].length;
+          const selectedValues = currentFilters[type] || [];
+          const count = selectedValues.length;
           const countEl = btn.querySelector(`[data-count="${type}"]`);
           if (countEl) countEl.textContent = count.toString();
           btn.classList.toggle("hasSelection", count > 0);
+
+          let hasZeroMatchSelection = false;
+          if (count > 0) {
+            const facetValues = computeFacetCounts(type);
+            const countMap = new Map(
+              facetValues.map((item) => [item.value, item.count || 0]),
+            );
+            hasZeroMatchSelection = selectedValues.some(
+              (value) => (countMap.get(value) || 0) === 0,
+            );
+          }
+          btn.classList.toggle("hasZeroMatchSelection", hasZeroMatchSelection);
         });
       }
 
@@ -3518,14 +3558,15 @@
         .addEventListener("click", () => {
           if (!activeFilterType) return;
           const values = computeFacetCounts(activeFilterType);
-          const nonZeroValues = values.filter((item) => item.count > 0);
           const query = popupSearchQuery.trim().toLowerCase();
-          const filteredValues = query
-            ? nonZeroValues.filter((item) =>
-                item.value.toLowerCase().includes(query),
-              )
-            : nonZeroValues;
-          tempSelectionSet = new Set(filteredValues.map((item) => item.value));
+          const visiblePositiveValues = values.filter(
+            (item) =>
+              item.count > 0 &&
+              (!query || item.value.toLowerCase().includes(query)),
+          );
+          tempSelectionSet = new Set(
+            visiblePositiveValues.map((item) => item.value),
+          );
           renderFilterPopup();
         });
 
