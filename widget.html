@@ -2663,6 +2663,8 @@
       let virtualFrameRequest = null;
       let estimatedCardHeight = 420;
       let pendingScrollRestore = null;
+      let lastScrollTop = 0;
+      let lastScrollTs = performance.now();
       const BASE_BATCH_SIZE = 24;
       const MAX_POOL_SIZE = 320;
 
@@ -2743,7 +2745,8 @@
         );
         const measured = totalHeight / samples.length;
         if (Number.isFinite(measured) && measured > 150) {
-          estimatedCardHeight = estimatedCardHeight * 0.75 + measured * 0.25;
+          const blended = estimatedCardHeight * 0.85 + measured * 0.15;
+          estimatedCardHeight = Math.max(260, Math.min(700, blended));
         }
       }
 
@@ -2762,13 +2765,22 @@
 
         const t0 = performance.now();
         const scrollTop = window.scrollY || window.pageYOffset || 0;
+        const now = performance.now();
+        const dt = Math.max(1, now - lastScrollTs);
+        const scrollDelta = Math.abs(scrollTop - lastScrollTop);
+        const scrollVelocity = scrollDelta / dt;
+        lastScrollTop = scrollTop;
+        lastScrollTs = now;
         const viewportHeight = window.innerHeight || 900;
         const dynamicBatch = getDynamicBatchSize();
         const visibleCount = Math.max(
           8,
           Math.ceil(viewportHeight / estimatedCardHeight),
         );
-        const overscan = Math.max(dynamicBatch, visibleCount * 2);
+        const overscan =
+          scrollVelocity > 2.2
+            ? Math.max(visibleCount, Math.floor(dynamicBatch * 0.5))
+            : Math.max(dynamicBatch, visibleCount * 2);
         const windowSize = Math.max(visibleCount + overscan, visibleCount);
         const maxStart = Math.max(0, total - windowSize);
         const start = Math.min(
@@ -2825,29 +2837,10 @@
       }
 
       function setupRenderObserver() {
-        if (renderObserver) {
-          renderObserver.disconnect();
-        }
-
-        const viewportHeight = window.innerHeight || 900;
-        const preload = Math.max(240, Math.floor(viewportHeight * 0.6));
-        const adaptiveThresholds = [0, 0.1, Math.min(1, 360 / viewportHeight), 1];
-
-        renderObserver = new IntersectionObserver(
-          (entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) {
-              scheduleVirtualWindowRender();
-            }
-          },
-          {
-            rootMargin: `${preload}px 0px ${preload}px 0px`,
-            threshold: adaptiveThresholds,
-          },
-        );
-
-        if (virtualProbe) {
-          renderObserver.observe(virtualProbe);
-        }
+        // Scroll + rAF drives virtual rendering. Keep observer disabled to avoid
+        // duplicate scheduling work and scroll-jank under fast scrollbar drags.
+        if (renderObserver) renderObserver.disconnect();
+        renderObserver = null;
       }
 
       function renderFilteredData(records) {
