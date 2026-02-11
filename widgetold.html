@@ -2087,6 +2087,7 @@
         searchLatencies: [],
         workerQueryTimes: [],
         facetOpenTimes: [],
+        renderBatchTimes: [],
       };
       window.__perfMetrics = perfMetrics;
 
@@ -2629,18 +2630,36 @@
         return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       }
 
+      let highlightCacheQuery = "";
+      let highlightCacheRegex = null;
+
+      function getHighlightRegex(searchTextLower) {
+        if (highlightCacheRegex && highlightCacheQuery === searchTextLower) {
+          return highlightCacheRegex;
+        }
+
+        const terms = tokenizeSearchText(searchTextLower);
+        if (!terms.length) {
+          highlightCacheQuery = searchTextLower;
+          highlightCacheRegex = null;
+          return null;
+        }
+
+        highlightCacheQuery = searchTextLower;
+        highlightCacheRegex = new RegExp(
+          `(${terms.map(escapeRegExp).join("|")})`,
+          "gi",
+        );
+        return highlightCacheRegex;
+      }
+
       function highlightText(text, searchTextLower) {
         const raw = String(text || "");
         if (!searchSettings.highlight || !searchTextLower)
           return escapeHtml(raw);
 
-        const terms = tokenizeSearchText(searchTextLower);
-        if (!terms.length) return escapeHtml(raw);
-
-        const regex = new RegExp(
-          `(${terms.map(escapeRegExp).join("|")})`,
-          "gi",
-        );
+        const regex = getHighlightRegex(searchTextLower);
+        if (!regex) return escapeHtml(raw);
         return escapeHtml(raw).replace(
           regex,
           '<mark class="searchHit">$1</mark>',
@@ -2650,6 +2669,21 @@
       function renderSearchText(el, text, searchTextLower) {
         if (!el) return;
         el.innerHTML = highlightText(text || "", searchTextLower);
+      }
+
+      function applyDeferredCardHighlights(card, searchTextLower) {
+        if (!card || card.dataset.deferredHighlightDone === "1") return;
+
+        card.querySelectorAll("[data-opt]").forEach((el) => {
+          renderSearchText(el, el.dataset.searchRaw || "", searchTextLower);
+        });
+
+        const explEl = card.querySelector('[data-expl="1"]');
+        if (explEl) {
+          renderSearchText(explEl, explEl.dataset.searchRaw || "", searchTextLower);
+        }
+
+        card.dataset.deferredHighlightDone = "1";
       }
 
       function getBaseMatches(activeFilters, excludeFacetKey = null) {
@@ -2854,7 +2888,7 @@
           const optText = card.querySelector(`[data-opt="${letter}"]`);
           if (optText) {
             optText.dataset.searchRaw = opts[letter] || "";
-            renderSearchText(optText, opts[letter], searchTextLower);
+            optText.textContent = opts[letter] || "";
           }
 
           const optEl = card.querySelector(`[data-letter="${letter}"]`);
@@ -2867,11 +2901,8 @@
         const explEl = card.querySelector('[data-expl="1"]');
         explEl.dataset.searchRaw =
           record.exam_robot_explanation || "No explanation available";
-        renderSearchText(
-          explEl,
-          record.exam_robot_explanation || "No explanation available",
-          searchTextLower,
-        );
+        explEl.textContent =
+          record.exam_robot_explanation || "No explanation available";
         card.querySelector('[data-sources="1"]').textContent =
           record.exam_robot_answer_sources || "No sources provided";
         card.querySelector('[data-verdict="1"]').textContent =
@@ -2890,6 +2921,7 @@
         const correctOpt = (record.exam_robot_correct_option || "")
           .trim()
           .toUpperCase();
+        card.dataset.correctOpt = correctOpt;
         const resPanel = card.querySelector('[data-result="1"]');
         const resText = card.querySelector('[data-result-text="1"]');
 
@@ -2916,10 +2948,10 @@
             if (letter === st.answer && st.answer !== correctOpt)
               optEl.classList.add("wrong");
           }
+          applyDeferredCardHighlights(card, searchTextLower);
         }
 
-        // Event delegation will handle clicks
-        attachCardEventHandlers(card, qid, correctOpt);
+        // Event delegation handles card clicks at container level
 
         debugLog(
           `[perf] buildCard in ${(performance.now() - t0).toFixed(1)}ms`,
@@ -2927,73 +2959,72 @@
         return card;
       }
 
-      function attachCardEventHandlers(card, qid, correctOpt) {
-        // Section button handlers
-        card.querySelectorAll("[data-section]").forEach((btn) => {
-          btn.addEventListener("click", (e) => {
-            const section = btn.getAttribute("data-section");
-            card
-              .querySelectorAll("[data-section]")
-              .forEach((b) => b.classList.remove("active"));
-            btn.classList.add("active");
-            card
-              .querySelectorAll("[data-content]")
-              .forEach((c) => c.classList.remove("show"));
-            card
-              .querySelector(`[data-content="${section}"]`)
-              .classList.add("show");
-          });
-        });
+      function handleCardSectionToggle(card, section, btn) {
+        card
+          .querySelectorAll("[data-section]")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        card
+          .querySelectorAll("[data-content]")
+          .forEach((c) => c.classList.remove("show"));
+        const content = card.querySelector(`[data-content="${section}"]`);
+        if (content) content.classList.add("show");
+      }
 
-        // Main card click handler
-        card.addEventListener("click", async (e) => {
-          const titleEl = e.target.closest("[data-copy-qid]");
-          if (titleEl) {
-            const idToCopy = titleEl.getAttribute("data-copy-qid") || "";
-            const copied = await copyTextToClipboard(idToCopy);
-            showToast(
-              copied
-                ? `Copied question_id: ${idToCopy}`
-                : "Unable to copy question_id",
-            );
-            return;
-          }
+      async function handleCardActionClick(e) {
+        const card = e.target.closest(".card");
+        if (!card) return;
 
-          // Eliminate button
-          const xBtn = e.target.closest("[data-x]");
-          if (xBtn) {
-            e.stopPropagation();
-            const letter = xBtn.getAttribute("data-x");
-            const cur = stateManager.get(qid);
-            cur.eliminated = cur.eliminated || {};
-            cur.eliminated[letter] = !cur.eliminated[letter];
-            stateManager.set(qid, cur);
+        const qid = card.dataset.qid || "";
+        const correctOpt = (card.dataset.correctOpt || "").toUpperCase();
 
-            const optEl = xBtn.closest(".opt");
-            if (optEl) {
-              optEl.classList.toggle("strike", cur.eliminated[letter]);
-            }
-            return;
-          }
+        const sectionBtn = e.target.closest("[data-section]");
+        if (sectionBtn) {
+          const section = sectionBtn.getAttribute("data-section");
+          if (section) handleCardSectionToggle(card, section, sectionBtn);
+          applyDeferredCardHighlights(card, getSearchTextLower());
+          return;
+        }
 
-          // Option selection
-          const opt = e.target.closest(".opt");
-          if (opt && !e.target.closest("[data-x]")) {
-            if (opt.classList.contains("strike")) return;
-            const letter = opt.dataset.letter;
-            const cur = stateManager.get(qid);
-            cur.answer = letter;
-            cur.isCorrect = letter === correctOpt;
-            stateManager.set(qid, cur);
+        const titleEl = e.target.closest("[data-copy-qid]");
+        if (titleEl) {
+          const idToCopy = titleEl.getAttribute("data-copy-qid") || "";
+          const copied = await copyTextToClipboard(idToCopy);
+          showToast(copied ? `Copied question_id: ${idToCopy}` : "Unable to copy question_id");
+          return;
+        }
 
-            const resPanel = card.querySelector('[data-result="1"]');
-            const resText = card.querySelector('[data-result-text="1"]');
+        const xBtn = e.target.closest("[data-x]");
+        if (xBtn) {
+          e.stopPropagation();
+          const letter = xBtn.getAttribute("data-x");
+          const cur = stateManager.get(qid);
+          cur.eliminated = cur.eliminated || {};
+          cur.eliminated[letter] = !cur.eliminated[letter];
+          stateManager.set(qid, cur);
 
-            resPanel.classList.add("show");
-            const isCorrect = letter === correctOpt;
-            const badgeClass = isCorrect ? "success" : "error";
-            const badgeText = isCorrect ? "✅ Correct!" : "❌ Incorrect";
-            resText.innerHTML = `
+          const optEl = xBtn.closest(".opt");
+          if (optEl) optEl.classList.toggle("strike", cur.eliminated[letter]);
+          return;
+        }
+
+        const opt = e.target.closest(".opt");
+        if (opt && !e.target.closest("[data-x]")) {
+          if (opt.classList.contains("strike")) return;
+          const letter = opt.dataset.letter;
+          const cur = stateManager.get(qid);
+          cur.answer = letter;
+          cur.isCorrect = letter === correctOpt;
+          stateManager.set(qid, cur);
+
+          const resPanel = card.querySelector('[data-result="1"]');
+          const resText = card.querySelector('[data-result-text="1"]');
+
+          resPanel.classList.add("show");
+          const isCorrect = letter === correctOpt;
+          const badgeClass = isCorrect ? "success" : "error";
+          const badgeText = isCorrect ? "✅ Correct!" : "❌ Incorrect";
+          resText.innerHTML = `
         <div class="resultHeader">
           <div class="resultSummary">
             <span class="resultBadge ${badgeClass}">${badgeText}</span>
@@ -3003,56 +3034,49 @@
         </div>
       `;
 
-            for (const optEl of card.querySelectorAll(".opt")) {
-              const L = optEl.dataset.letter;
-              optEl.classList.remove("correct", "wrong");
-              if (L === correctOpt) optEl.classList.add("correct");
-              if (L === letter && letter !== correctOpt)
-                optEl.classList.add("wrong");
-            }
-
-            card.dataset.answered = isCorrect ? "true" : "false";
-            showToast(
-              isCorrect
-                ? "Great job! Correct answer."
-                : "Incorrect. Keep going!",
-            );
-            if (isCorrect) spawnConfetti();
-
-            setTimeout(() => {
-              resPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            }, 100);
-
-            updateHeaderStats();
-            return;
+          for (const optEl of card.querySelectorAll(".opt")) {
+            const L = optEl.dataset.letter;
+            optEl.classList.remove("correct", "wrong");
+            if (L === correctOpt) optEl.classList.add("correct");
+            if (L === letter && letter !== correctOpt) optEl.classList.add("wrong");
           }
 
-          // Reset button
-          const resetBtn = e.target.closest("[data-reset]");
-          if (resetBtn) {
-            if (
-              confirm(
-                "Reset this question? This will clear your answer and eliminations.",
-              )
-            ) {
-              stateManager.delete(qid);
-              scheduleFilteredUpdate();
-            }
-            return;
-          }
+          card.dataset.answered = isCorrect ? "true" : "false";
+          applyDeferredCardHighlights(card, getSearchTextLower());
+          showToast(isCorrect ? "Great job! Correct answer." : "Incorrect. Keep going!");
+          if (isCorrect) spawnConfetti();
 
-          // Collapse button
-          const collapseBtn = e.target.closest("[data-collapse]");
-          if (collapseBtn) {
-            const resPanel = card.querySelector('[data-result="1"]');
-            resPanel.classList.toggle("collapsed");
-            collapseBtn.textContent = resPanel.classList.contains("collapsed")
-              ? "Expand"
-              : "Collapse";
-            return;
+          setTimeout(() => {
+            resPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 100);
+
+          updateHeaderStats();
+          return;
+        }
+
+        const resetBtn = e.target.closest("[data-reset]");
+        if (resetBtn) {
+          if (confirm("Reset this question? This will clear your answer and eliminations.")) {
+            stateManager.delete(qid);
+            scheduleFilteredUpdate();
           }
-        });
+          return;
+        }
+
+        const collapseBtn = e.target.closest("[data-collapse]");
+        if (collapseBtn) {
+          const resPanel = card.querySelector('[data-result="1"]');
+          resPanel.classList.toggle("collapsed");
+          collapseBtn.textContent = resPanel.classList.contains("collapsed")
+            ? "Expand"
+            : "Collapse";
+          return;
+        }
       }
+
+      document.getElementById("app").addEventListener("click", (e) => {
+        handleCardActionClick(e);
+      });
 
       // ============================================================================
       // RENDERING AND VIRTUAL SCROLLING
@@ -3062,7 +3086,9 @@
       let renderObserver = null;
       let loadSentinel = null;
       let emptyStateEl = null;
-      const BATCH_SIZE = 50; // Increased from 40
+      const MIN_BATCH_SIZE = 12;
+      const MAX_BATCH_SIZE = 120;
+      const RENDER_FRAME_BUDGET_MS = 8;
 
       function buildEmptyStateElement() {
         const emptyState = document.createElement("div");
@@ -3081,16 +3107,23 @@
         const t0 = performance.now();
         const app = document.getElementById("app");
         const fragment = document.createDocumentFragment();
-        const end = Math.min(
-          renderCursor + BATCH_SIZE,
-          currentFilteredRecords.length,
-        );
+        const deadline = t0 + RENDER_FRAME_BUDGET_MS;
 
-        for (let i = renderCursor; i < end; i++) {
-          fragment.appendChild(buildCard(currentFilteredRecords[i], i));
+        let rendered = 0;
+        while (
+          renderCursor < currentFilteredRecords.length &&
+          rendered < MAX_BATCH_SIZE
+        ) {
+          fragment.appendChild(
+            buildCard(currentFilteredRecords[renderCursor], renderCursor),
+          );
+          renderCursor++;
+          rendered++;
+
+          if (rendered >= MIN_BATCH_SIZE && performance.now() >= deadline) {
+            break;
+          }
         }
-
-        renderCursor = end;
 
         if (loadSentinel) loadSentinel.remove();
         app.appendChild(fragment);
@@ -3103,8 +3136,10 @@
           app.appendChild(loadSentinel);
         }
 
+        const batchMs = performance.now() - t0;
+        recordPerfMetric("renderBatchTimes", batchMs);
         debugLog(
-          `[perf] renderNextBatch: ${end - (renderCursor - (end - renderCursor))} cards in ${(performance.now() - t0).toFixed(1)}ms`,
+          `[perf] renderNextBatch: ${rendered} cards in ${batchMs.toFixed(1)}ms (budget ${RENDER_FRAME_BUDGET_MS}ms)`,
         );
       }
 
@@ -3845,8 +3880,14 @@
 
       function refreshVisibleHighlights() {
         const searchTextLower = getSearchTextLower();
-        document.querySelectorAll("#app [data-search-raw]").forEach((el) => {
+        document.querySelectorAll("#app [data-qtext]").forEach((el) => {
           renderSearchText(el, el.dataset.searchRaw || "", searchTextLower);
+        });
+        document.querySelectorAll("#app .card").forEach((card) => {
+          if (card.dataset.deferredHighlightDone === "1") {
+            card.dataset.deferredHighlightDone = "";
+            applyDeferredCardHighlights(card, searchTextLower);
+          }
         });
       }
 
