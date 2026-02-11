@@ -2656,12 +2656,12 @@
       let virtualBottomSpacer = null;
       let virtualWindow = null;
       let virtualProbe = null;
-      const virtualCardPool = [];
+      const virtualCardPool = new Map();
+      const virtualPoolOrder = [];
       const activeVirtualCards = new Map();
       let lastRenderRange = { start: 0, end: 0 };
       let virtualFrameRequest = null;
       let estimatedCardHeight = 420;
-      let lastMeasuredScrollTop = 0;
       let pendingScrollRestore = null;
       const BASE_BATCH_SIZE = 24;
       const MAX_POOL_SIZE = 320;
@@ -2706,25 +2706,31 @@
 
       function recycleCardElement(card) {
         if (!card) return;
+        const qid = card.dataset.qid || "";
         card.remove();
-        if (virtualCardPool.length < MAX_POOL_SIZE) {
-          virtualCardPool.push(card);
+        if (!qid || virtualCardPool.has(qid)) return;
+        virtualCardPool.set(qid, card);
+        virtualPoolOrder.push(qid);
+
+        while (virtualPoolOrder.length > MAX_POOL_SIZE) {
+          const evictQid = virtualPoolOrder.shift();
+          if (!evictQid) break;
+          virtualCardPool.delete(evictQid);
         }
       }
 
       function acquireCardElement(record, index) {
-        const card = virtualCardPool.pop();
-        if (!card) {
-          return buildCard(record, index);
+        const qid = getRecordId(record, index);
+        const pooled = virtualCardPool.get(qid);
+        if (pooled) {
+          virtualCardPool.delete(qid);
+          const orderIdx = virtualPoolOrder.indexOf(qid);
+          if (orderIdx >= 0) {
+            virtualPoolOrder.splice(orderIdx, 1);
+          }
+          return pooled;
         }
-        const refreshed = buildCard(record, index);
-        card.className = refreshed.className;
-        card.dataset.qid = refreshed.dataset.qid;
-        card.dataset.correctOpt = refreshed.dataset.correctOpt;
-        card.dataset.answered = refreshed.dataset.answered || "";
-        card.replaceChildren(...Array.from(refreshed.childNodes));
-        attachCardEventHandlers(card);
-        return card;
+        return buildCard(record, index);
       }
 
       function updateEstimatedCardHeight() {
@@ -2756,7 +2762,6 @@
 
         const t0 = performance.now();
         const scrollTop = window.scrollY || window.pageYOffset || 0;
-        lastMeasuredScrollTop = scrollTop;
         const viewportHeight = window.innerHeight || 900;
         const dynamicBatch = getDynamicBatchSize();
         const visibleCount = Math.max(
@@ -2764,11 +2769,16 @@
           Math.ceil(viewportHeight / estimatedCardHeight),
         );
         const overscan = Math.max(dynamicBatch, visibleCount * 2);
-        const start = Math.max(
+        const windowSize = Math.max(visibleCount + overscan, visibleCount);
+        const maxStart = Math.max(0, total - windowSize);
+        const start = Math.min(
+          maxStart,
+          Math.max(
           0,
           Math.floor(scrollTop / estimatedCardHeight) - Math.floor(overscan / 2),
+          ),
         );
-        const end = Math.min(total, start + overscan + visibleCount);
+        const end = Math.min(total, start + windowSize);
 
         if (start === lastRenderRange.start && end === lastRenderRange.end) return;
 
@@ -2785,13 +2795,24 @@
         }
 
         activeVirtualCards.clear();
-        const fragment = document.createDocumentFragment();
+        const orderedCards = [];
         for (let i = start; i < end; i++) {
           const card = nextVisible.get(i);
           activeVirtualCards.set(i, card);
-          fragment.appendChild(card);
+          orderedCards.push(card);
         }
-        virtualWindow.replaceChildren(fragment);
+
+        for (let i = 0; i < orderedCards.length; i++) {
+          const expected = orderedCards[i];
+          const atPos = virtualWindow.children[i];
+          if (atPos !== expected) {
+            virtualWindow.insertBefore(expected, atPos || null);
+          }
+        }
+
+        while (virtualWindow.children.length > orderedCards.length) {
+          virtualWindow.lastElementChild.remove();
+        }
 
         virtualTopSpacer.style.height = `${Math.max(0, start * estimatedCardHeight)}px`;
         virtualBottomSpacer.style.height = `${Math.max(0, (total - end) * estimatedCardHeight)}px`;
