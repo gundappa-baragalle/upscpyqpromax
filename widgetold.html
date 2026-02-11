@@ -2379,6 +2379,7 @@
             console.debug(
               `[perf] search worker initialized (${payload.count} rows)`,
             );
+            scheduleFilteredUpdate();
             return;
           }
 
