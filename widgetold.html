@@ -2216,13 +2216,27 @@
         return dumpPerfMetrics();
       }
 
+      function runQuickBenchmarkNow() {
+        return runQuickBenchmark().then((out) => {
+          console.log("Benchmark complete", out);
+          return out;
+        });
+      }
+
       window.__perfHelpers = {
         resetMetrics: resetPerfMetrics,
         dumpMetrics: dumpPerfMetrics,
         runQuickBenchmark,
+        runQuickBenchmarkNow,
       };
+      window._perfHelpers = window.__perfHelpers;
+      window.perfHelpers = window.__perfHelpers;
       globalThis.__perfHelpers = window.__perfHelpers;
+      globalThis._perfHelpers = window.__perfHelpers;
+      globalThis.perfHelpers = window.__perfHelpers;
       var __perfHelpers = window.__perfHelpers;
+      var _perfHelpers = window.__perfHelpers;
+      var perfHelpers = window.__perfHelpers;
 
       let searchSettings = {
         scopeQuestion: true,
