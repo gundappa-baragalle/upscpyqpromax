@@ -2082,6 +2082,17 @@
       ];
       const SEARCH_SETTINGS_KEY = "mcq_search_settings_v1";
       const DEBUG = false;
+      const ENABLE_PERF_HELPERS = (() => {
+        if (DEBUG) return true;
+        if (new URLSearchParams(window.location.search).get("perf") === "1") {
+          return true;
+        }
+        try {
+          return window.localStorage.getItem("mcq_perf_helpers") === "1";
+        } catch (_) {
+          return false;
+        }
+      })();
 
       const perfMetrics = {
         searchLatencies: [],
@@ -2223,20 +2234,21 @@
         });
       }
 
-      window.__perfHelpers = {
-        resetMetrics: resetPerfMetrics,
-        dumpMetrics: dumpPerfMetrics,
-        runQuickBenchmark,
-        runQuickBenchmarkNow,
-      };
-      window._perfHelpers = window.__perfHelpers;
-      window.perfHelpers = window.__perfHelpers;
-      globalThis.__perfHelpers = window.__perfHelpers;
-      globalThis._perfHelpers = window.__perfHelpers;
-      globalThis.perfHelpers = window.__perfHelpers;
-      var __perfHelpers = window.__perfHelpers;
-      var _perfHelpers = window.__perfHelpers;
-      var perfHelpers = window.__perfHelpers;
+      if (ENABLE_PERF_HELPERS) {
+        const helpers = {
+          resetMetrics: resetPerfMetrics,
+          dumpMetrics: dumpPerfMetrics,
+          runQuickBenchmark,
+          runQuickBenchmarkNow,
+        };
+        window.__perfHelpers = helpers;
+        window._perfHelpers = helpers;
+        window.perfHelpers = helpers;
+        globalThis.__perfHelpers = helpers;
+        globalThis._perfHelpers = helpers;
+        globalThis.perfHelpers = helpers;
+        debugLog("Perf helpers enabled. Use window.perfHelpers.* in console.");
+      }
 
       let searchSettings = {
         scopeQuestion: true,
