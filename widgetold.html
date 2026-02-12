@@ -2234,21 +2234,41 @@
         });
       }
 
-      if (ENABLE_PERF_HELPERS) {
-        const helpers = {
-          resetMetrics: resetPerfMetrics,
-          dumpMetrics: dumpPerfMetrics,
-          runQuickBenchmark,
-          runQuickBenchmarkNow,
-        };
-        window.__perfHelpers = helpers;
-        window._perfHelpers = helpers;
-        window.perfHelpers = helpers;
-        globalThis.__perfHelpers = helpers;
-        globalThis._perfHelpers = helpers;
-        globalThis.perfHelpers = helpers;
-        debugLog("Perf helpers enabled. Use window.perfHelpers.* in console.");
-      }
+      const disabledPerfHelpers = {
+        resetMetrics() {
+          console.warn(
+            "Perf helpers are disabled in production. Enable with ?perf=1 or localStorage.mcq_perf_helpers='1'.",
+          );
+          return null;
+        },
+        dumpMetrics: dumpPerfMetrics,
+        runQuickBenchmark() {
+          console.warn(
+            "runQuickBenchmark is disabled in production. Enable with ?perf=1 or localStorage.mcq_perf_helpers='1'.",
+          );
+          return dumpPerfMetrics();
+        },
+        runQuickBenchmarkNow() {
+          return this.runQuickBenchmark();
+        },
+      };
+
+      const perfHelpers = ENABLE_PERF_HELPERS
+        ? {
+            resetMetrics: resetPerfMetrics,
+            dumpMetrics: dumpPerfMetrics,
+            runQuickBenchmark,
+            runQuickBenchmarkNow,
+          }
+        : disabledPerfHelpers;
+
+      window.__perfHelpers = perfHelpers;
+      window._perfHelpers = perfHelpers;
+      window.perfHelpers = perfHelpers;
+      globalThis.__perfHelpers = perfHelpers;
+      globalThis._perfHelpers = perfHelpers;
+      globalThis.perfHelpers = perfHelpers;
+      debugLog("Perf helpers enabled. Use window.perfHelpers.* in console.");
 
       let searchSettings = {
         scopeQuestion: true,
