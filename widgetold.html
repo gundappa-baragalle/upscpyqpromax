@@ -3566,9 +3566,18 @@
         return `${searchKey}||${filterKey}`;
       }
 
+      function areSearchCandidatesReadyForCurrentState() {
+        const searchTextLower = getSearchTextLower();
+        if (!searchTextLower) return true;
+        const scopes = getEffectiveScopes();
+        const expectedCandidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
+        return latestSearchCandidatesKey === expectedCandidatesKey;
+      }
+
       function computeAllFacetCountsForState() {
         const stateKey = makeFacetCountsStateKey();
-        if (facetCountsCache.key === stateKey) {
+        const canUseFacetCache = areSearchCandidatesReadyForCurrentState();
+        if (canUseFacetCache && facetCountsCache.key === stateKey) {
           debugLog(`[perf] facetCountsCache: hit`);
           return facetCountsCache.byFacet;
         }
@@ -3601,8 +3610,10 @@
           }));
         });
 
-        facetCountsCache.key = stateKey;
-        facetCountsCache.byFacet = byFacet;
+        if (canUseFacetCache) {
+          facetCountsCache.key = stateKey;
+          facetCountsCache.byFacet = byFacet;
+        }
 
         const facetComputeMs = performance.now() - t0;
         recordPerfMetric("facetComputeTimes", facetComputeMs);
