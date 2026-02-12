@@ -2268,7 +2268,9 @@
       globalThis.__perfHelpers = perfHelpers;
       globalThis._perfHelpers = perfHelpers;
       globalThis.perfHelpers = perfHelpers;
-      debugLog("Perf helpers enabled. Use window.perfHelpers.* in console.");
+      if (ENABLE_PERF_HELPERS) {
+        debugLog("Perf helpers enabled. Use window.perfHelpers.* in console.");
+      }
 
       let searchSettings = {
         scopeQuestion: true,
@@ -3420,7 +3422,6 @@
       let activeFilterType = null;
       let tempSelectionSet = new Set();
       let popupSearchQuery = "";
-      let popupSearchDebounce = null;
 
       const filterPopup = document.getElementById("filterPopup");
       const filterOverlay = document.getElementById("filterOverlay");
@@ -4312,7 +4313,7 @@
         );
       });
 
-      console.log("✅ Optimized MCQ Practice App Loaded");
+      debugLog("✅ Optimized MCQ Practice App Loaded");
     </script>
   </body>
 </html>
