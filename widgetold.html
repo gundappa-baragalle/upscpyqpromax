@@ -3556,7 +3556,9 @@
       }
 
       function makeFacetCountsStateKey() {
-        const searchKey = latestSearchCandidatesKey || "__search_pending__";
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const searchKey = getSearchCandidatesKey(searchTextLower, scopes);
         const filterKey = FACET_KEYS.map((k) => {
           const vals = [...currentFilterSets[k]].sort();
           return `${k}:${vals.join("|")}`;
