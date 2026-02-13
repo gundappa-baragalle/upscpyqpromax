@@ -3297,6 +3297,7 @@
       let latestSearchCandidatesKey = null;
       let latestFilteredRecords = [];
       let latestFacetsKey = null; // Track if facets match the current search
+      let latestFacetsStateKey = null; // Track if facets match search + filters state
       const SEARCH_CACHE_MAX_ENTRIES = 250;
       const searchResultCache = new Map();
       let ALL_ROW_INDICES = [];
@@ -3305,6 +3306,7 @@
         searchResultCache.clear();
         latestSearchCandidatesKey = null;
         latestFacetsKey = null;
+        latestFacetsStateKey = null;
         facetCountsCache.key = "";
       }
 
@@ -3404,13 +3406,16 @@
             // Update facet cache from worker data
             if (payload.facets) {
               facetCountsCache.byFacet = payload.facets;
+              facetCountsCache.key = searchWorker._activeFacetStateKey || "";
               latestFacetsKey = searchWorker._activeCandidatesKey;
+              latestFacetsStateKey = searchWorker._activeFacetStateKey || null;
             }
 
             setCachedSearchResult(cacheKey, {
               indices: payload.indices || [],
               candidates: latestSearchCandidateIndices,
               facets: payload.facets, // Cache facets too
+              facetsStateKey: searchWorker._activeFacetStateKey || null,
             });
             renderFilteredData(allRecords, {
               partial: false,
@@ -3698,10 +3703,79 @@
         return indices;
       }
 
+      function computeFacetCountsSinglePass(candidateIndices, filters) {
+        const results = {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        };
+
+        const counts = {
+          exam: new Map(),
+          year: new Map(),
+          subject: new Map(),
+          theme: new Map(),
+          topic: new Map(),
+        };
+
+        const activeFilters = {};
+        FACET_KEYS.forEach((key) => {
+          if (filters[key] && filters[key].length > 0) {
+            activeFilters[key] = new Set(filters[key]);
+          }
+        });
+
+        for (let i = 0; i < candidateIndices.length; i++) {
+          const row = ROWS[candidateIndices[i]];
+          if (!row) continue;
+
+          let failCount = 0;
+          let failedFilterKey = null;
+
+          for (const key in activeFilters) {
+            if (!activeFilters[key].has(row[key])) {
+              failCount++;
+              failedFilterKey = key;
+              if (failCount > 1) break;
+            }
+          }
+
+          if (failCount === 0) {
+            for (let k = 0; k < FACET_KEYS.length; k++) {
+              const key = FACET_KEYS[k];
+              const value = row[key];
+              if (!value) continue;
+              counts[key].set(value, (counts[key].get(value) || 0) + 1);
+            }
+          } else if (failCount === 1) {
+            const value = row[failedFilterKey];
+            if (value) {
+              counts[failedFilterKey].set(
+                value,
+                (counts[failedFilterKey].get(value) || 0) + 1,
+              );
+            }
+          }
+        }
+
+        FACET_KEYS.forEach((key) => {
+          results[key] = Array.from(counts[key].entries()).map(([value, count]) => ({
+            value,
+            count,
+          }));
+        });
+
+        return results;
+      }
+
       function runSearchPipeline() {
         const searchTextLower = getSearchTextLower();
         const scopes = getEffectiveScopes();
         const candidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
+        const filtersPayload = getFiltersPayload();
+        const facetStateKey = makeFacetCountsStateKey();
 
         if (!searchWorkerReady || !searchWorker) {
           const fallbackCandidates = buildFallbackSearchCandidates(
@@ -3717,7 +3791,13 @@
 
           latestSearchCandidateIndices = fallbackCandidates;
           latestSearchCandidatesKey = candidatesKey;
-          latestFacetsKey = null; // Fallback doesn't compute facets
+          facetCountsCache.byFacet = computeFacetCountsSinglePass(
+            fallbackCandidates,
+            filtersPayload,
+          );
+          facetCountsCache.key = facetStateKey;
+          latestFacetsKey = candidatesKey;
+          latestFacetsStateKey = facetStateKey;
           latestFilteredRecords = fallbackFiltered;
           renderFilteredData(fallbackFiltered, {
             partial: false,
@@ -3726,7 +3806,6 @@
           return;
         }
 
-        const filtersPayload = getFiltersPayload();
         const cacheKey = getSearchCacheKey(
           searchTextLower,
           scopes,
@@ -3739,7 +3818,9 @@
           latestSearchCandidatesKey = candidatesKey;
           if (cached.facets) {
             facetCountsCache.byFacet = cached.facets;
+            facetCountsCache.key = cached.facetsStateKey || facetStateKey;
             latestFacetsKey = candidatesKey;
+            latestFacetsStateKey = cached.facetsStateKey || facetStateKey;
           }
 
           const cachedIndices = cached.indices || [];
@@ -3754,6 +3835,7 @@
         const requestId = ++lastSearchRequestId;
         searchWorker._activeCacheKey = cacheKey;
         searchWorker._activeCandidatesKey = candidatesKey;
+        searchWorker._activeFacetStateKey = facetStateKey;
         searchWorker.postMessage({
           type: "SEARCH",
           requestId,
@@ -4517,10 +4599,13 @@
 
       function isFacetDataReadyForCurrentState() {
         if (!ROWS.length) return false;
-        // Facets are ready only if the worker has returned them for the current search state
+        const stateKey = makeFacetCountsStateKey();
+        // Facets are ready only if we have data for current search candidates AND filter state.
         return (
           areSearchCandidatesReadyForCurrentState() &&
-          latestFacetsKey === latestSearchCandidatesKey
+          latestFacetsKey === latestSearchCandidatesKey &&
+          latestFacetsStateKey === stateKey &&
+          facetCountsCache.key === stateKey
         );
       }
 
@@ -4536,7 +4621,17 @@
       function computeAllFacetCountsForState() {
         const stateKey = makeFacetCountsStateKey();
 
-        // Use pre-computed facets from worker
+        // If cache is stale (race / fallback path), recompute facets on main thread.
+        if (facetCountsCache.key !== stateKey) {
+          facetCountsCache.byFacet = computeFacetCountsSinglePass(
+            latestSearchCandidateIndices,
+            getFiltersPayload(),
+          );
+          facetCountsCache.key = stateKey;
+          latestFacetsKey = latestSearchCandidatesKey;
+          latestFacetsStateKey = stateKey;
+        }
+
         const rawFacets = facetCountsCache.byFacet;
         const result = {};
 
@@ -4644,6 +4739,7 @@
 
         // If worker is ready but facets aren't (race condition), wait for them
         if (searchWorkerReady && !isFacetDataReadyForCurrentState()) {
+          setFilterPopupControlsDisabled(true);
           filterPopupList.innerHTML = `<div class="muted">Updating filters...</div>`;
           // The SEARCH_DONE message will trigger a re-render of the popup if open
           return;
@@ -5518,6 +5614,7 @@
         latestSearchCandidateIndices = ALL_ROW_INDICES;
         latestSearchCandidatesKey = null;
         latestFacetsKey = null;
+        latestFacetsStateKey = null;
         latestFilteredRecords = ROWS.map((row) => row.record);
         scheduleFilteredUpdate();
       });
