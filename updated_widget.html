@@ -1,0 +1,5548 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MCQ Practice - Optimized</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+      :root {
+        --bg-primary: #0d1117;
+        --bg-secondary: rgba(1, 4, 9, 0.95);
+        --bg-card: rgba(22, 27, 34, 0.8);
+        --bg-elevated: #1c2128;
+        --bg-overlay: #21262d;
+        --border-subtle: rgba(48, 54, 61, 0.8);
+        --border-medium: #3d444d;
+        --border-hover: #57606a;
+        --border-focus: #2f81f7;
+        --text-primary: #e6edf3;
+        --text-secondary: #c9d1d9;
+        --text-muted: #8b949e;
+        --accent-primary: #2f81f7;
+        --accent-hover: #58a6ff;
+        --accent-soft: rgba(47, 129, 247, 0.16);
+        --success-bg: #0f2419;
+        --success-border: #238636;
+        --success-text: #3fb950;
+        --error-bg: #2d1117;
+        --error-border: #da3633;
+        --error-text: #f85149;
+        --warning-bg: #2f240f;
+        --warning-border: #9e6a03;
+        --highlight: #e3b341;
+        --highlight-text: #0d1117;
+        --eliminated-opacity: 0.35;
+        --transition-fast: 0.15s;
+        --transition-normal: 0.25s;
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.34);
+        --shadow-md:
+          0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.45);
+        --toolbar-height: 36px;
+        --toolbar-radius: 10px;
+        --font-primary:
+          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: "SF Mono", "Monaco", "Cascadia Code", monospace;
+        --gradient-primary: linear-gradient(135deg, #2f81f7 0%, #58a6ff 100%);
+        --gradient-success: linear-gradient(135deg, #238636 0%, #3fb950 100%);
+        --gradient-error: linear-gradient(135deg, #da3633 0%, #f85149 100%);
+        --surface-raised: #161b22;
+        --surface-overlay: #21262d;
+        --toast-z: 600;
+        --header-height: 70px;
+        --sidebar-width: 280px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      .isHidden {
+        display: none;
+      }
+
+      html {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: var(--font-primary);
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+        letter-spacing: -0.011em;
+        margin: 0;
+        padding: 0;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        line-height: 1.55;
+        transition:
+          background-color var(--transition-normal),
+          color var(--transition-normal);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        background: var(--bg-secondary);
+        padding: 16px 20px;
+        z-index: 100;
+        box-shadow: var(--shadow-sm);
+        background: rgba(1, 4, 9, 0.95);
+        backdrop-filter: blur(20px) saturate(180%);
+        border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+      }
+
+      .headerMain {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+      }
+
+      header .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+        animation: slideDown 0.3s ease-out;
+      }
+
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes scaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border: 1px solid rgba(48, 54, 61, 0.5);
+        border-radius: 999px;
+        background: linear-gradient(
+          135deg,
+          rgba(28, 33, 40, 0.85),
+          rgba(22, 27, 34, 0.7)
+        );
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 500;
+        transition: all var(--transition-fast);
+      }
+
+      .pill:hover {
+        border-color: rgba(47, 129, 247, 0.5);
+        box-shadow: 0 4px 12px rgba(47, 129, 247, 0.2);
+      }
+
+      .pill .num {
+        font-weight: 700;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .filterBar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: stretch;
+      }
+
+      .filterButton {
+        display: inline-flex;
+        align-items: stretch;
+        gap: 0;
+        min-height: var(--toolbar-height);
+        padding: 0;
+        border-radius: 10px;
+        border: 1px solid var(--border-medium);
+        background: var(--bg-overlay);
+        color: var(--text-secondary);
+        box-shadow: inset 0 1px 0 rgba(240, 246, 252, 0.02);
+        overflow: hidden;
+        transition:
+          border-color var(--transition-fast),
+          background-color var(--transition-fast),
+          transform var(--transition-fast),
+          box-shadow var(--transition-fast);
+      }
+
+      .filterButtonMain {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        font-weight: 600;
+        letter-spacing: 0.1px;
+      }
+
+      .filterButtonArrow {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        border-left: 1px solid var(--border-medium);
+        color: var(--text-muted);
+      }
+
+      .filterButton svg {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        opacity: 0.9;
+      }
+
+      .filterButton .label {
+        text-transform: none;
+      }
+
+      .filterButton .count {
+        background: rgba(139, 148, 158, 0.24);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-primary);
+        min-width: 22px;
+        height: 22px;
+        padding: 0 7px;
+        border-radius: 999px;
+        font-size: 12px;
+        line-height: 20px;
+        text-align: center;
+      }
+
+      .filterButton.hasSelection {
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 1px var(--accent-soft);
+      }
+
+      .filterButton.hasZeroMatchSelection .count {
+        background: rgba(248, 81, 73, 0.2);
+        border-color: rgba(248, 81, 73, 0.8);
+        color: #ffb4ad;
+      }
+
+      .filterButton:hover {
+        transform: translateY(-1px);
+        background: var(--bg-card);
+        border-color: var(--border-hover);
+      }
+
+      .filterButton:hover .filterButtonArrow {
+        background: rgba(139, 148, 158, 0.08);
+      }
+
+      .filterOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(9, 12, 18, 0.55);
+        backdrop-filter: blur(2px);
+        z-index: 300;
+        display: none;
+      }
+
+      .filterOverlay.show {
+        display: block;
+        animation: fadeIn 0.2s ease-out;
+      }
+
+      .filterPopup {
+        position: fixed;
+        width: min(420px, calc(100vw - 24px));
+        min-width: 320px;
+        max-width: 420px;
+        background: rgba(1, 4, 9, 0.98);
+        backdrop-filter: blur(24px) saturate(180%);
+        border: 1px solid rgba(48, 54, 61, 0.6);
+        border-radius: 20px;
+        box-shadow:
+          0 24px 48px rgba(0, 0, 0, 0.4),
+          0 8px 16px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        padding: 16px;
+        z-index: 400;
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .filterPopup.show {
+        display: flex;
+        animation: scaleIn 0.2s ease-out;
+      }
+
+      .filterPopupHeader {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .filterPopupTitle {
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--text-primary);
+      }
+
+      .filterPopupSearch {
+        width: 100%;
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 2px solid var(--border-medium);
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        font-size: 14px;
+      }
+
+      .filterPopupSearch:focus {
+        outline: none;
+        border-color: var(--border-focus);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .filterPopupStats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin: 8px 0;
+      }
+
+      .filterPopupStatCard {
+        --pct: 0%;
+        border: 1px solid var(--border-medium);
+        border-radius: 10px;
+        padding: 8px 10px;
+        min-height: 62px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        font-size: 12px;
+        line-height: 1.35;
+        color: var(--text-primary);
+        background: linear-gradient(
+          90deg,
+          var(--accent-soft) 0%,
+          var(--accent-soft) var(--pct),
+          var(--bg-elevated) var(--pct),
+          var(--bg-elevated) 100%
+        );
+      }
+
+      .filterPopupStatCard strong {
+        display: block;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-bottom: 2px;
+      }
+
+      .filterPopupStatValue {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 680px) {
+        .filterPopupStats {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .filterPopupActions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .filterSortButton {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 32px;
+        padding: 6px 10px;
+        border-radius: 10px;
+        border: 2px solid var(--border-medium);
+        background: var(--bg-elevated);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+      }
+
+      .filterSortButton .sortGlyph {
+        font-size: 14px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.9;
+      }
+
+      .filterSortButton .sortLabel {
+        font-size: 12px;
+        font-weight: 600;
+        color: currentColor;
+        white-space: nowrap;
+      }
+
+      .filterSortButton:hover {
+        border-color: var(--border-hover);
+        transform: translateY(-1px);
+      }
+
+      .filterSortButton.active {
+        border-color: var(--border-focus);
+        color: var(--text-primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+      }
+
+      .filterSortButton:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .filterPopupList {
+        height: 360px;
+        max-height: 360px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding-right: 4px;
+      }
+
+      .filterItem {
+        position: relative;
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: linear-gradient(
+          to right,
+          rgba(28, 33, 40, 0.6),
+          rgba(22, 27, 34, 0.4)
+        );
+        border: 1px solid rgba(48, 54, 61, 0.4);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .filterItem:hover {
+        background: linear-gradient(
+          to right,
+          rgba(47, 129, 247, 0.1),
+          rgba(47, 129, 247, 0.05)
+        );
+        border-color: rgba(47, 129, 247, 0.4);
+        transform: translateX(4px);
+      }
+
+      .filterItemLabel {
+        flex: 1;
+        min-width: 0;
+        font-size: 14px;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .filterItemCount {
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      .filterItemToggle {
+        min-width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 2px solid var(--border-medium);
+        background: linear-gradient(135deg, #21262d 0%, #161b22 100%);
+        color: var(--text-primary);
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all var(--transition-fast);
+      }
+
+      .filterItemToggle.active {
+        background: var(--gradient-success);
+        border-color: var(--success-text);
+        color: #fff;
+        transform: scale(1.08);
+        box-shadow:
+          0 0 0 4px rgba(63, 185, 80, 0.2),
+          0 4px 8px rgba(63, 185, 80, 0.3);
+      }
+
+      .filterItemToggle.warningZeroMatch {
+        border: 2px solid #f85149;
+      }
+
+      .filterItemToggle.active.warningZeroMatch {
+        border-color: #f85149;
+        box-shadow:
+          0 0 0 4px rgba(248, 81, 73, 0.2),
+          0 4px 8px rgba(248, 81, 73, 0.25);
+      }
+
+      .filterItemCount.warningZeroMatch {
+        color: #ff7b72;
+      }
+
+      .filterSectionDivider {
+        margin: 4px 0 2px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border-subtle);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+
+      .filterPopupFooter {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .filterPopupFooter .secondary {
+        background: transparent;
+        border-color: var(--border-medium);
+        color: var(--text-secondary);
+      }
+
+      /* VS Code-style Sidebar System */
+      .app-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      .activity-bar {
+        width: 50px;
+        background: rgba(22, 27, 34, 0.98);
+        border-right: 1px solid rgba(48, 54, 61, 0.4);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 12px 0;
+        gap: 8px;
+        overflow-y: auto;
+        flex-shrink: 0;
+        z-index: 99;
+        position: sticky;
+        bottom: 0;
+      }
+
+      .activity-bar-item {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        border: 2px solid transparent;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      .activity-bar-item:hover {
+        background: rgba(48, 54, 61, 0.5);
+        color: var(--text-primary);
+      }
+
+      .activity-bar-item.active {
+        background: rgba(47, 129, 247, 0.15);
+        border-color: var(--accent-primary);
+        color: var(--accent-primary);
+      }
+
+      .activity-bar-item:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: 2px;
+      }
+
+      .activity-bar-item svg {
+        width: 24px;
+        height: 24px;
+      }
+
+      .sidebar-wrapper {
+        position: relative;
+        width: var(--sidebar-width, 280px);
+        background: linear-gradient(
+          to bottom,
+          rgba(28, 33, 40, 0.98),
+          rgba(22, 27, 34, 0.99)
+        );
+        border-right: 1px solid rgba(48, 54, 61, 0.6);
+        display: flex;
+        flex-direction: column;
+        z-index: 98;
+        transition: width var(--transition-normal) ease-out;
+        overflow: hidden;
+      }
+
+      .sidebar-wrapper.collapsed {
+        width: 0 !important;
+        border-right: none;
+        overflow: hidden;
+      }
+
+      .sidebar-resize-handle {
+        position: absolute;
+        right: 0;
+        top: 0;
+        width: 4px;
+        height: 100%;
+        cursor: col-resize;
+        background: transparent;
+        transition: background-color var(--transition-fast);
+        z-index: 100;
+      }
+
+      .sidebar-resize-handle:hover,
+      .sidebar-resize-handle.resizing {
+        background: var(--accent-primary);
+      }
+
+      .sidebar-header {
+        padding: 16px;
+        border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+
+      .sidebar-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .sidebar-content {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .sidebar-panel {
+        display: none;
+        opacity: 0;
+        transition: opacity var(--transition-normal);
+        pointer-events: none;
+      }
+
+      .sidebar-panel.active {
+        display: flex;
+        flex-direction: column;
+        opacity: 1;
+        pointer-events: auto;
+        visibility: visible !important;
+      }
+
+      .sidebar-panel.active * {
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+
+      .sidebarPanelList {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .sidebarEmpty {
+        text-align: center;
+        padding: 24px 16px;
+        color: var(--text-muted);
+        font-size: 13px;
+        opacity: 0.7;
+      }
+
+      .sidebarTopicItem,
+      .sidebarProgressItem {
+        padding: 10px 12px;
+        background: rgba(22, 27, 34, 0.6);
+        border: 1px solid rgba(48, 54, 61, 0.4);
+        border-radius: 6px;
+        color: var(--text-secondary);
+        font-size: 12px;
+        transition: all var(--transition-fast);
+        cursor: pointer;
+      }
+
+      .sidebarTopicItem:hover {
+        background: rgba(47, 129, 247, 0.12);
+        border-color: rgba(47, 129, 247, 0.3);
+        color: var(--text-primary);
+      }
+
+      .sidebarProgressItem {
+        border-left: 2px solid var(--accent-primary);
+        background: rgba(47, 129, 247, 0.06);
+      }
+
+      .sidebarProgressValue {
+        color: var(--accent-primary);
+        font-weight: 600;
+      }
+
+      .sidebarPanelList {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .sidebarEmpty {
+        text-align: center;
+        padding: 24px 16px;
+        color: var(--text-muted);
+        font-size: 13px;
+        opacity: 0.7;
+      }
+
+      .sidebarTopicItem {
+        padding: 8px 12px;
+        background: rgba(47, 129, 247, 0.08);
+        border: 1px solid rgba(47, 129, 247, 0.2);
+        border-radius: 6px;
+        color: var(--text-secondary);
+        font-size: 12px;
+        transition: all var(--transition-fast);
+        cursor: pointer;
+      }
+
+      .sidebarTopicItem:hover {
+        background: rgba(47, 129, 247, 0.15);
+        border-color: rgba(47, 129, 247, 0.4);
+        color: var(--text-primary);
+      }
+
+      .sidebarProgressItem {
+        padding: 10px 12px;
+        background: rgba(22, 27, 34, 0.6);
+        border-left: 2px solid var(--accent-primary);
+        border-radius: 4px;
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      .sidebarProgressValue {
+        color: var(--accent-primary);
+        font-weight: 600;
+      }
+
+      .statsStack::before {
+        content: "";
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: conic-gradient(
+          var(--accent-primary) calc(var(--progress, 0) * 1%),
+          rgba(48, 54, 61, 0.3) 0
+        );
+        display: block;
+        margin: 0 auto 16px;
+        box-shadow:
+          0 4px 12px rgba(47, 129, 247, 0.3),
+          inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        flex-shrink: 0;
+      }
+
+      .sidebar h3 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .statsStack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        overflow-x: hidden;
+        background: var(--bg-primary);
+      }
+
+      .main-content.expanded {
+        width: 100%;
+      }
+
+      .layout {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px;
+        width: 100%;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0;
+        width: 100%;
+        flex: 1;
+      }
+
+      #app {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .smallbtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--accent-primary);
+        color: var(--text-primary);
+        border: 2px solid transparent;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .smallbtn::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.28);
+        transform: translate(-50%, -50%);
+        transition:
+          width 0.6s,
+          height 0.6s;
+      }
+
+      .smallbtn:active::after {
+        width: 220px;
+        height: 220px;
+      }
+
+      .smallbtn:hover {
+        background: var(--accent-hover);
+        transform: translateY(-1px);
+      }
+
+      .smallbtn.secondary {
+        background: transparent;
+        border-color: var(--border-medium);
+        color: var(--text-secondary);
+      }
+
+      .smallbtn[data-collapse] {
+        min-width: 84px;
+        justify-content: center;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .mainContent {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0;
+        width: 100%;
+      }
+
+      .card {
+        position: relative;
+        background: linear-gradient(
+          135deg,
+          rgba(28, 33, 40, 0.95) 0%,
+          rgba(22, 27, 34, 0.98) 100%
+        );
+        backdrop-filter: blur(16px) saturate(200%);
+        border: 1px solid rgba(48, 54, 61, 0.8);
+        border-radius: 14px;
+        padding: 32px 36px;
+        margin-bottom: 24px;
+        box-shadow:
+          0 8px 16px rgba(0, 0, 0, 0.2),
+          0 2px 4px rgba(0, 0, 0, 0.1),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        contain: layout style paint;
+        content-visibility: auto;
+        animation: cardEntrance 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+
+      @keyframes cardEntrance {
+        from {
+          opacity: 0;
+          transform: translateY(24px) scale(0.92);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        border-radius: 14px 14px 0 0;
+        background: var(--gradient-primary);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+
+      .card::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 14px;
+        background: radial-gradient(
+          600px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+          rgba(47, 129, 247, 0.1),
+          transparent 80%
+        );
+        opacity: 0;
+        transition: opacity 0.3s;
+        pointer-events: none;
+      }
+
+      .card:hover {
+        transform: translateY(-4px);
+        box-shadow:
+          0 24px 48px rgba(0, 0, 0, 0.3),
+          0 8px 16px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+        border-color: rgba(47, 129, 247, 0.5);
+      }
+
+      .card:hover::after {
+        opacity: 1;
+      }
+
+      .card:hover::before,
+      .card[data-answered]::before {
+        opacity: 1;
+      }
+
+      .card[data-answered="true"]::before {
+        background: var(--gradient-success);
+      }
+      .card[data-answered="false"]::before {
+        background: var(--gradient-error);
+      }
+
+      .card.active {
+        border-color: rgba(47, 129, 247, 0.4);
+        box-shadow:
+          0 8px 16px rgba(0, 0, 0, 0.2),
+          0 2px 4px rgba(0, 0, 0, 0.1),
+          inset 0 1px 0 rgba(47, 129, 247, 0.1),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+      }
+
+      .opttext {
+        font-size: clamp(14px, 1.5vw, 16px);
+        line-height: 1.75;
+        letter-spacing: -0.011em;
+        color: var(--text-secondary);
+        word-break: break-word;
+      }
+
+      .meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      .qtext {
+        font-size: clamp(16px, 2vw, 19px);
+        line-height: 1.8;
+        margin: 20px 0 24px 0;
+        font-weight: 500;
+        letter-spacing: -0.013em;
+        color: var(--text-primary);
+        word-break: break-word;
+      }
+
+      .pill.copyableMeta {
+        cursor: copy;
+        user-select: text;
+        transition:
+          color var(--transition-fast),
+          border-color var(--transition-fast);
+      }
+
+      .pill.copyableMeta:hover {
+        color: var(--accent-hover);
+        border-color: var(--accent-primary);
+      }
+
+      .opts {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin: 12px 0;
+      }
+
+      .opt {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 18px 20px;
+        border: 1.5px solid rgba(48, 54, 61, 0.5);
+        border-radius: 11px;
+        background: linear-gradient(
+          135deg,
+          rgba(28, 33, 40, 0.8) 0%,
+          rgba(22, 27, 34, 0.6) 100%
+        );
+        cursor: pointer;
+        transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        overflow: hidden;
+        backdrop-filter: blur(8px);
+      }
+
+      .opt::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(47, 129, 247, 0.08),
+          transparent
+        );
+        transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        z-index: 0;
+      }
+
+      .opt:hover::before {
+        left: 100%;
+      }
+
+      .opt:hover {
+        border-color: rgba(47, 129, 247, 0.6);
+        background: linear-gradient(
+          135deg,
+          rgba(47, 129, 247, 0.15) 0%,
+          rgba(47, 129, 247, 0.08) 100%
+        );
+        transform: translateX(6px) translateY(-1px);
+        box-shadow:
+          0 4px 12px rgba(47, 129, 247, 0.15),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+
+      .opt:active {
+        transform: translateX(6px) translateY(0);
+      }
+
+      .opt .letter {
+        min-width: 40px;
+        height: 40px;
+        border-radius: 9px;
+        background: linear-gradient(
+          135deg,
+          rgba(48, 54, 61, 0.8),
+          rgba(28, 33, 40, 0.9)
+        );
+        border: 1.5px solid rgba(48, 54, 61, 0.6);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 15px;
+        color: var(--text-secondary);
+        flex-shrink: 0;
+        position: relative;
+        z-index: 1;
+        transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .opt:hover .letter {
+        background: var(--gradient-primary);
+        border-color: var(--accent-hover);
+        color: #fff;
+        transform: scale(1.08) rotate(-3deg);
+        box-shadow: 0 4px 12px rgba(47, 129, 247, 0.4);
+      }
+
+      .opt .opttext {
+        flex: 1;
+        font-size: clamp(13px, 1.4vw, 15px);
+        position: relative;
+        z-index: 1;
+      }
+
+      .opt.correct {
+        border-color: var(--success-border);
+        background: linear-gradient(
+          to right,
+          rgba(63, 185, 80, 0.15),
+          rgba(63, 185, 80, 0.08)
+        );
+        box-shadow:
+          0 0 0 4px rgba(63, 185, 80, 0.1),
+          0 4px 8px rgba(63, 185, 80, 0.2);
+        animation: successPulse 0.6s ease-out;
+      }
+
+      .opt.wrong {
+        border-color: var(--error-border);
+        background: linear-gradient(
+          to right,
+          rgba(248, 81, 73, 0.15),
+          rgba(248, 81, 73, 0.08)
+        );
+        animation: shake 0.5s;
+      }
+
+      .opt.correct .letter {
+        background: var(--gradient-success);
+        border-color: var(--success-text);
+        color: #fff;
+      }
+
+      .opt.wrong .letter {
+        background: var(--gradient-error);
+        border-color: var(--error-text);
+        color: #fff;
+      }
+
+      .opt.strike {
+        opacity: 0.4;
+        filter: grayscale(0.8);
+        text-decoration: none;
+      }
+
+      .opt.strike::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 10%;
+        right: 10%;
+        height: 2px;
+        background: var(--error-text);
+        transform: translateY(-50%) rotate(-3deg);
+        box-shadow: 0 0 4px rgba(248, 81, 73, 0.5);
+      }
+
+      @keyframes successPulse {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+      }
+      @keyframes shake {
+        0%,
+        100% {
+          transform: translateX(0);
+        }
+        25% {
+          transform: translateX(-8px);
+        }
+        75% {
+          transform: translateX(8px);
+        }
+      }
+
+      .xbtn {
+        padding: 6px 10px;
+        background: var(--error-bg);
+        border: 1px solid var(--error-border);
+        color: var(--text-muted);
+        font-size: 12px;
+        margin-left: auto;
+        min-width: 32px;
+        border-radius: 8px;
+        z-index: 1;
+      }
+
+      .xbtn:hover {
+        border-color: var(--error-text);
+        background: var(--error-border);
+        color: white;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .result {
+        background: var(--bg-elevated);
+        border-radius: 14px;
+        border: 1px solid var(--border-subtle);
+        padding: 14px;
+        margin-top: 14px;
+        display: none;
+      }
+
+      .result.show {
+        display: block;
+        animation: fadeIn 0.25s ease-out;
+      }
+
+      .resultHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .resultSummary {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .result.collapsed .resultDetails {
+        display: none;
+      }
+
+      .resultBadge {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .resultBadge.success {
+        background: var(--success-bg);
+        color: var(--success-text);
+        border: 1px solid var(--success-border);
+      }
+
+      .resultBadge.error {
+        background: var(--error-bg);
+        color: var(--error-text);
+        border: 1px solid var(--error-border);
+      }
+
+      .resultDetails {
+        margin-top: 12px;
+      }
+
+      .sectionButtons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .sectionBtn {
+        border-radius: 999px;
+        padding: 6px 12px;
+        border: 1px solid var(--border-medium);
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 12px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+      }
+
+      .sectionBtn.active {
+        background: var(--gradient-primary);
+        color: white;
+        border-color: transparent;
+      }
+
+      .sectionContent {
+        display: none;
+        padding: 10px;
+        background: var(--bg-secondary);
+        border-radius: 10px;
+        border: 1px solid var(--border-subtle);
+      }
+
+      .sectionContent.show {
+        display: block;
+      }
+
+      .sectionTitle {
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+
+      .pre {
+        white-space: pre-wrap;
+      }
+
+      .muted {
+        color: var(--text-muted);
+      }
+
+      .searchWrapper {
+        position: relative;
+        flex: 1;
+        min-width: 260px;
+      }
+
+      .searchWrapper input {
+        width: 100%;
+        min-height: var(--toolbar-height);
+        padding: 0 92px 0 34px;
+        border-radius: var(--toolbar-radius);
+        border: 2px solid var(--border-medium);
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        font-size: clamp(12px, 1.4vw, 14px);
+      }
+
+      .searchWrapper input:focus {
+        outline: none;
+        border-color: var(--border-focus);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .searchIcon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+      }
+
+      .searchClear {
+        position: absolute;
+        right: 64px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px;
+        display: none;
+        z-index: 2;
+        font-size: 14px;
+      }
+      .searchClear:hover {
+        color: var(--text-primary);
+      }
+      /* Show clear button when input has text (placeholder not shown) */
+      .searchWrapper input:not(:placeholder-shown) ~ .searchClear {
+        display: block;
+      }
+
+      .searchControls {
+        position: absolute;
+        right: 0px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .searchMiniBtn {
+        width: 18px;
+        height: 23px;
+        border-radius: 6px;
+        border: 1px solid rgba(88, 166, 255, 0.25);
+        background: linear-gradient(
+          180deg,
+          rgba(28, 33, 40, 0.95),
+          rgba(22, 27, 34, 0.95)
+        );
+        color: #d8e3f0;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all var(--transition-fast);
+        box-shadow:
+          inset 0 0 0 1px rgba(88, 166, 255, 0.18),
+          0 0 0 2px rgba(13, 17, 23, 0.95);
+      }
+
+      .searchMiniBtn:hover {
+        border-color: var(--accent-hover);
+        color: #fff;
+      }
+
+      .searchMiniBtn.active {
+        border-color: var(--accent-hover);
+        /* border-color: yellow; */
+        color: #fff;
+        box-shadow:
+          inset 0 0 0 1px rgba(88, 166, 255, 0.7),
+          0 0 0 2px rgba(47, 129, 247, 0.35);
+      }
+
+      .searchScopeTrigger {
+        display: inline-flex;
+        align-items: stretch;
+        min-height: 34px;
+        padding: 0;
+        border-radius: 10px;
+        border: 1px solid var(--border-medium);
+        border-top-left-radius: 0px;
+        border-bottom-left-radius: 0px;
+        background: var(--bg-overlay);
+        color: var(--text-secondary);
+        overflow: hidden;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+      }
+
+      .searchScopeTrigger:hover {
+        border-color: var(--border-hover);
+        background: var(--bg-card);
+      }
+
+      .searchScopeTriggerArrow {
+        width: 30px;
+        border-left: 1px solid var(--border-medium);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .searchScopePopup {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        width: min(280px, calc(100vw - 24px));
+        background: rgba(1, 4, 9, 0.98);
+        backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(48, 54, 61, 0.6);
+        border-radius: 14px;
+        box-shadow: var(--shadow-lg);
+        padding: 12px;
+        z-index: 450;
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .searchScopePopup.show {
+        display: flex;
+        animation: scaleIn 0.2s ease-out;
+      }
+
+      .searchScopeHeader {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-primary);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      .searchScopeItem {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 42px;
+        border: 1px solid rgba(48, 54, 61, 0.4);
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: linear-gradient(
+          to right,
+          rgba(28, 33, 40, 0.6),
+          rgba(22, 27, 34, 0.4)
+        );
+        color: var(--text-primary);
+        text-align: left;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .searchScopeItem:hover {
+        background: linear-gradient(
+          to right,
+          rgba(47, 129, 247, 0.1),
+          rgba(47, 129, 247, 0.05)
+        );
+        border-color: rgba(47, 129, 247, 0.4);
+        transform: translateX(4px);
+      }
+
+      .searchScopeToggle {
+        min-width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 2px solid var(--border-medium);
+        background: linear-gradient(135deg, #21262d 0%, #161b22 100%);
+        color: var(--text-primary);
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .searchScopeToggle.active {
+        background: var(--gradient-success);
+        border-color: var(--success-text);
+        color: #fff;
+      }
+
+      .searchScopeFooter {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+
+      .searchScopeFooter .smallbtn {
+        min-height: 30px;
+        padding: 4px 10px;
+        font-size: 11px;
+      }
+
+      mark.searchHit {
+        background: rgba(227, 179, 65, 0.35);
+        color: var(--text-primary);
+        padding: 0 1px;
+        border-radius: 3px;
+      }
+
+      .emptyState {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--text-muted);
+      }
+
+      .emptyState svg {
+        width: 46px;
+        height: 46px;
+        opacity: 0.6;
+        margin-bottom: 10px;
+      }
+
+      .fabStack {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 200;
+      }
+
+      .fabButton {
+        border-radius: 50%;
+        width: 46px;
+        height: 46px;
+        border: none;
+        background: var(--accent-primary);
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+        box-shadow: var(--shadow-md);
+        transition:
+          transform var(--transition-fast),
+          box-shadow var(--transition-fast);
+      }
+
+      .fabButton.hidden {
+        display: none;
+      }
+
+      .fabButton:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: var(--toast-z);
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-medium);
+        border-radius: 12px;
+        padding: 14px 18px;
+        box-shadow: var(--shadow-lg);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+      }
+
+      .skip-link {
+        position: absolute;
+        top: -40px;
+        left: 0;
+        background: var(--accent-primary);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 0 0 8px 0;
+      }
+
+      .skip-link:focus {
+        top: 0;
+        z-index: 999;
+      }
+
+      *:focus-visible {
+        outline: 2px solid var(--accent-primary);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      @media (max-width: 1024px) and (min-width: 641px) {
+        .layout {
+          grid-template-columns: 200px 1fr;
+        }
+        .opts {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .card {
+          padding: 16px;
+          border-radius: 16px;
+          margin-bottom: 12px;
+        }
+        .opt {
+          padding: 12px;
+          gap: 10px;
+        }
+        .filterButton,
+        .smallbtn {
+          min-height: 44px;
+          font-size: 14px;
+        }
+        .filterPopup {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          top: auto;
+          max-width: 100%;
+          width: 100%;
+          min-width: 0;
+          border-radius: 20px 20px 0 0;
+          transform: translateY(100%);
+        }
+        .filterPopup.show {
+          transform: translateY(0);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      @media (prefers-contrast: high) {
+        .card,
+        .opt {
+          border: 2px solid currentColor;
+        }
+      }
+
+      .shortcuts {
+        position: fixed;
+        right: 24px;
+        bottom: 90px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle);
+        border-radius: 14px;
+        padding: 14px;
+        width: 240px;
+        box-shadow: var(--shadow-lg);
+        display: none;
+      }
+
+      .shortcuts.show {
+        display: block;
+        animation: scaleIn 0.2s ease-out;
+      }
+
+      .shortcuts h4 {
+        margin: 0 0 10px;
+        font-size: 14px;
+      }
+
+      .shortcuts .item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+
+      .shortcuts .key {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-medium);
+        border-radius: 6px;
+        padding: 2px 6px;
+      }
+
+      @media (max-width: 768px) {
+        .activity-bar {
+          position: relative;
+          width: 100%;
+          height: auto;
+          flex-direction: row;
+          flex-wrap: wrap;
+          border-right: none;
+          border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+          padding: 8px;
+          top: auto;
+          left: auto;
+        }
+        .sidebar-wrapper {
+          position: static;
+          width: 100%;
+          height: auto;
+          border-right: none;
+          border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+          max-height: 200px;
+          flex-direction: row;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
+        .sidebar-wrapper.collapsed {
+          width: 100%;
+          max-height: 0;
+          overflow: hidden;
+        }
+        .sidebar-header {
+          display: none;
+        }
+        .sidebar-content {
+          flex-direction: row;
+          padding: 12px;
+          gap: 12px;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
+        .main-content {
+          position: static;
+          width: 100%;
+          height: auto;
+          left: auto;
+          top: auto;
+          right: auto;
+          bottom: auto;
+        }
+        .main-content.expanded {
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 820px) {
+        header {
+          padding: 12px 16px;
+        }
+        .headerMain {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .filterBar {
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .filterButton {
+          min-height: 35px;
+          font-size: 12px;
+        }
+        .filterButtonMain {
+          padding: 0 10px;
+          gap: 6px;
+        }
+        .filterButton svg {
+          width: 14px;
+          height: 14px;
+        }
+        .filterButtonArrow {
+          width: 32px;
+        }
+        .filterButton .count {
+          min-width: 20px;
+          height: 20px;
+          line-height: 18px;
+          font-size: 11px;
+          padding: 0 6px;
+        }
+        .opt {
+          padding: 10px 12px;
+          gap: 10px;
+        }
+        .opt .letter {
+          min-width: 28px;
+          height: 28px;
+          font-size: 12px;
+        }
+      }
+
+      @media print {
+        header,
+        .topTools,
+        .actions,
+        .xbtn,
+        .filterBar,
+        .filterPopup,
+        .filterOverlay,
+        .fabStack {
+          display: none;
+        }
+        body {
+          background: white;
+          color: black;
+        }
+        .card {
+          box-shadow: none;
+          border-color: var(--border-subtle);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a href="#mainContent" class="skip-link">Skip to content</a>
+    <header>
+      <div class="headerMain">
+        <div>
+          <div style="font-weight: 700; font-size: 18px">MCQ Practice</div>
+          <div class="muted" style="font-size: 12px">Powered by Grist</div>
+        </div>
+        <div class="filterBar">
+          <button class="filterButton" data-filter="exam">
+            <span class="filterButtonMain">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M8.21.5a.75.75 0 0 0-.42 0L1.65 2.49a.75.75 0 0 0 0 1.42l2.12.69v2.45a.75.75 0 0 0 1.5 0V5.08L8 5.96l6.35-2.05a.75.75 0 0 0 0-1.42ZM2.5 8.25a.75.75 0 0 1 .75-.75h9.5a.75.75 0 0 1 .75.75v2.15c0 2.2-2.45 3.6-5.5 3.6s-5.5-1.4-5.5-3.6Z"
+                ></path>
+              </svg>
+              <span class="label">Exams</span>
+              <span class="count" data-count="exam">0</span>
+            </span>
+            <span class="filterButtonArrow" aria-hidden="true">▾</span>
+          </button>
+          <button class="filterButton" data-filter="year">
+            <span class="filterButtonMain">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M4.75 0a.75.75 0 0 1 .75.75V2h5V.75a.75.75 0 0 1 1.5 0V2h.5A2.5 2.5 0 0 1 15 4.5v8A2.5 2.5 0 0 1 12.5 15h-9A2.5 2.5 0 0 1 1 12.5v-8A2.5 2.5 0 0 1 3.5 2H4V.75A.75.75 0 0 1 4.75 0ZM2.5 6.5v6A1 1 0 0 0 3.5 13.5h9a1 1 0 0 0 1-1v-6Z"
+                ></path>
+              </svg>
+              <span class="label">Years</span>
+              <span class="count" data-count="year">0</span>
+            </span>
+            <span class="filterButtonArrow" aria-hidden="true">▾</span>
+          </button>
+          <button class="filterButton" data-filter="subject">
+            <span class="filterButtonMain">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M1.75 2h11.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 13.25 14H1.75A1.75 1.75 0 0 1 0 12.25v-8.5C0 2.784.784 2 1.75 2ZM1.5 5v7.25c0 .138.112.25.25.25h11.5a.25.25 0 0 0 .25-.25V5Z"
+                ></path>
+              </svg>
+              <span class="label">Subjects</span>
+              <span class="count" data-count="subject">0</span>
+            </span>
+            <span class="filterButtonArrow" aria-hidden="true">▾</span>
+          </button>
+          <button class="filterButton" data-filter="theme">
+            <span class="filterButtonMain">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M7.75 0a.75.75 0 0 1 .53.22l1.97 1.97h2.79c.67 0 1.21.54 1.21 1.21v2.79l1.97 1.97a.75.75 0 0 1 0 1.06l-1.97 1.97v2.79c0 .67-.54 1.21-1.21 1.21h-2.79l-1.97 1.97a.75.75 0 0 1-1.06 0L5.22 14.7H2.43a1.21 1.21 0 0 1-1.21-1.21V10.7L-.75 8.72a.75.75 0 0 1 0-1.06L1.22 5.69V2.9c0-.67.54-1.21 1.21-1.21h2.79L7.19.22A.75.75 0 0 1 7.75 0Zm0 2.03L6.2 3.58a.75.75 0 0 1-.53.22H3.03v2.64a.75.75 0 0 1-.22.53L1.26 8.5l1.55 1.55a.75.75 0 0 1 .22.53v2.64h2.64a.75.75 0 0 1 .53.22l1.55 1.55 1.55-1.55a.75.75 0 0 1 .53-.22h2.64v-2.64a.75.75 0 0 1 .22-.53l1.55-1.55-1.55-1.55a.75.75 0 0 1-.22-.53V3.8H9.83a.75.75 0 0 1-.53-.22Z"
+                ></path>
+              </svg>
+              <span class="label">Themes</span>
+              <span class="count" data-count="theme">0</span>
+            </span>
+            <span class="filterButtonArrow" aria-hidden="true">▾</span>
+          </button>
+          <button class="filterButton" data-filter="topic">
+            <span class="filterButtonMain">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M2 1.75A1.75 1.75 0 0 1 3.75 0h8.5A1.75 1.75 0 0 1 14 1.75v12.5A1.75 1.75 0 0 1 12.25 16h-8.5A1.75 1.75 0 0 1 2 14.25Zm1.5.25v12h9v-12Zm1.5 2.75a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 5 4.75Zm0 3a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 5 7.75Z"
+                ></path>
+              </svg>
+              <span class="label">Topics</span>
+              <span class="count" data-count="topic">0</span>
+            </span>
+            <span class="filterButtonArrow" aria-hidden="true">▾</span>
+          </button>
+        </div>
+        <div class="searchWrapper">
+          <span class="searchIcon" aria-hidden="true"
+            ><svg
+              aria-hidden="true"
+              focusable="false"
+              class="octicon octicon-search"
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              fill="currentColor"
+              display="inline-block"
+              overflow="visible"
+              style="vertical-align: text-bottom"
+            >
+              <path
+                d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"
+              ></path></svg
+          ></span>
+          <input
+            id="clientSearch"
+            type="text"
+            placeholder="Search questions, options, explanations..."
+            autocomplete="off"
+          />
+          <button
+            id="searchClear"
+            class="searchClear"
+            title="Clear search"
+            aria-label="Clear search"
+          >
+            ✕
+          </button>
+          <div class="searchControls">
+            <button
+              class="searchMiniBtn"
+              id="searchHighlightToggle"
+              type="button"
+              aria-pressed="false"
+              title="Toggle search highlight"
+            >
+              h
+            </button>
+            <button
+              class="searchScopeTrigger"
+              id="searchScopeToggle"
+              type="button"
+              aria-expanded="false"
+              title="Search scope"
+            >
+              <span class="searchScopeTriggerArrow" aria-hidden="true">▾</span>
+            </button>
+          </div>
+          <div
+            class="searchScopePopup"
+            id="searchScopePopup"
+            aria-hidden="true"
+          >
+            <div class="searchScopeHeader">Search in</div>
+            <button
+              class="searchScopeItem"
+              type="button"
+              data-search-scope="scopeQuestion"
+            >
+              <span>Question text</span
+              ><span class="searchScopeToggle" id="scopeQuestionToggle">✓</span>
+            </button>
+            <button
+              class="searchScopeItem"
+              type="button"
+              data-search-scope="scopeOptions"
+            >
+              <span>Options</span
+              ><span class="searchScopeToggle" id="scopeOptionsToggle">✓</span>
+            </button>
+            <button
+              class="searchScopeItem"
+              type="button"
+              data-search-scope="scopeExplanation"
+            >
+              <span>Explanation</span
+              ><span class="searchScopeToggle" id="scopeExplanationToggle"
+                >✓</span
+              >
+            </button>
+            <div class="searchScopeFooter">
+              <button class="smallbtn secondary" id="scopeAll" type="button">
+                All
+              </button>
+              <button class="smallbtn secondary" id="scopeNone" type="button">
+                None
+              </button>
+              <button class="smallbtn" id="scopeClose" type="button">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="app-container">
+      <!-- Activity Bar (Icons) -->
+      <div class="activity-bar">
+        <button
+          class="activity-bar-item active"
+          data-panel="stats"
+          id="statsActivityBtn"
+          title="Statistics"
+          aria-label="Toggle statistics panel"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            />
+          </svg>
+        </button>
+        <button
+          class="activity-bar-item"
+          data-panel="topics"
+          id="topicsActivityBtn"
+          title="Popular Topics"
+          aria-label="Browse popular topics"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+            />
+          </svg>
+        </button>
+        <button
+          class="activity-bar-item"
+          data-panel="bookmarks"
+          id="bookmarksActivityBtn"
+          title="Saved Questions"
+          aria-label="View saved questions"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M5 5a2 2 0 012-2h6a2 2 0 012 2v16l-7-3.5L5 21V5z"
+            />
+          </svg>
+        </button>
+        <button
+          class="activity-bar-item"
+          data-panel="progress"
+          id="progressActivityBtn"
+          title="Study Progress"
+          aria-label="View study progress"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Resizable Sidebar -->
+      <div class="sidebar-wrapper" id="sidebarWrapper">
+        <div class="sidebar-resize-handle" id="sidebarResizeHandle"></div>
+
+        <div class="sidebar-header">
+          <div class="sidebar-title" id="sidebarTitle">Statistics</div>
+        </div>
+
+        <div class="sidebar-content">
+          <!-- Stats Panel -->
+          <div class="sidebar-panel active" data-panel="stats">
+            <h3>Performance</h3>
+            <div class="statsStack">
+              <div class="pill">📚 MCQ Practice</div>
+              <div class="pill">
+                Total: <span class="num" id="count">0</span>
+              </div>
+              <div class="pill">
+                Attempted: <span class="num" id="attempted">0</span>
+              </div>
+              <div class="pill">
+                ✅ Correct: <span class="num" id="correct">0</span>
+              </div>
+              <div class="pill">
+                ❌ Wrong: <span class="num" id="wrong">0</span>
+              </div>
+              <div class="pill">
+                Accuracy: <span class="num" id="accuracy">0%</span>
+              </div>
+            </div>
+            <button id="clearProgress" class="smallbtn">
+              🗑️ Clear Progress
+            </button>
+          </div>
+
+          <!-- Topics Panel -->
+          <div class="sidebar-panel" data-panel="topics">
+            <h3>Popular Topics</h3>
+            <div id="topicsPanel" class="sidebarPanelList"></div>
+          </div>
+
+          <!-- Bookmarks Panel -->
+          <div class="sidebar-panel" data-panel="bookmarks">
+            <h3>Saved Questions</h3>
+            <div id="bookmarksPanel" class="sidebarPanelList">
+              <div class="sidebarEmpty">📌 No saved questions yet</div>
+            </div>
+          </div>
+
+          <!-- Study Progress Panel -->
+          <div class="sidebar-panel" data-panel="progress">
+            <h3>Study Progress</h3>
+            <div id="progressPanel" class="sidebarPanelList"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content Area -->
+      <main class="main-content" id="mainContent">
+        <div class="layout">
+          <div class="container">
+            <div id="app"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <!-- Close app-container -->
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <div class="filterOverlay" id="filterOverlay"></div>
+    <div class="filterPopup" id="filterPopup" aria-hidden="true">
+      <div class="filterPopupHeader">
+        <div class="filterPopupTitle" id="filterPopupTitle">Filter</div>
+        <div class="filterPopupActions">
+          <button
+            class="filterSortButton"
+            id="filterSortToggle"
+            type="button"
+            aria-pressed="false"
+            title="Sort: Count ↓"
+            aria-label="Sort: Count high to low"
+          >
+            <span class="sortGlyph" aria-hidden="true">⇅</span>
+            <span class="sortLabel" id="filterSortLabel">Count ↓</span>
+          </button>
+          <button class="smallbtn" id="filterSelectAll">All</button>
+          <button class="smallbtn" id="filterSelectNone">None</button>
+        </div>
+      </div>
+      <input
+        class="filterPopupSearch"
+        id="filterPopupSearch"
+        type="text"
+        placeholder="Search values"
+        autocomplete="off"
+      />
+      <div class="muted" id="filterPopupTotal">Total: 0</div>
+      <div class="filterPopupList" id="filterPopupList"></div>
+      <div class="filterPopupFooter">
+        <button class="smallbtn" id="filterApply">Apply</button>
+        <button class="smallbtn secondary" id="filterCancel">Cancel</button>
+      </div>
+    </div>
+
+    <div class="fabStack">
+      <button class="fabButton hidden" id="scrollToTop" title="Move to top">
+        ⬆️
+      </button>
+      <button class="fabButton" id="showShortcuts" title="Shortcuts">⌨️</button>
+    </div>
+
+    <div class="shortcuts" id="shortcuts">
+      <h4>⌨️ Keyboard Shortcuts</h4>
+      <div class="item">
+        <span>Focus search</span>
+        <span class="key">/</span>
+      </div>
+      <div class="item">
+        <span>Clear search</span>
+        <span class="key">Esc</span>
+      </div>
+      <div class="item">
+        <span>Toggle filters</span>
+        <span class="key">F</span>
+      </div>
+      <div class="item">
+        <span>Show shortcuts</span>
+        <span class="key">?</span>
+      </div>
+    </div>
+
+    <template id="cardTemplate">
+      <div class="card">
+        <div class="meta">
+          <span class="pill" data-qmeta></span>
+        </div>
+        <div class="qtext pre" data-qtext></div>
+        <div class="opts">
+          <div
+            class="opt"
+            data-letter="A"
+            role="button"
+            tabindex="0"
+            aria-label="Select Option A"
+          >
+            <div class="letter">A</div>
+            <div class="opttext pre" data-opt="A"></div>
+            <button class="smallbtn xbtn" data-x="A" title="Eliminate option A">
+              ✕
+            </button>
+          </div>
+          <div
+            class="opt"
+            data-letter="B"
+            role="button"
+            tabindex="0"
+            aria-label="Select Option B"
+          >
+            <div class="letter">B</div>
+            <div class="opttext pre" data-opt="B"></div>
+            <button class="smallbtn xbtn" data-x="B" title="Eliminate option B">
+              ✕
+            </button>
+          </div>
+          <div
+            class="opt"
+            data-letter="C"
+            role="button"
+            tabindex="0"
+            aria-label="Select Option C"
+          >
+            <div class="letter">C</div>
+            <div class="opttext pre" data-opt="C"></div>
+            <button class="smallbtn xbtn" data-x="C" title="Eliminate option C">
+              ✕
+            </button>
+          </div>
+          <div
+            class="opt"
+            data-letter="D"
+            role="button"
+            tabindex="0"
+            aria-label="Select Option D"
+          >
+            <div class="letter">D</div>
+            <div class="opttext pre" data-opt="D"></div>
+            <button class="smallbtn xbtn" data-x="D" title="Eliminate option D">
+              ✕
+            </button>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="smallbtn" data-reset="1">🔄 Reset</button>
+        </div>
+        <div class="result" data-result="1">
+          <div data-result-text="1"></div>
+          <div class="resultDetails">
+            <div class="sectionButtons">
+              <button class="sectionBtn active" data-section="explanation">
+                💡 Explanation
+              </button>
+              <button class="sectionBtn" data-section="sources">
+                📚 Sources
+              </button>
+              <button class="sectionBtn" data-section="verdict">
+                ⚖️ Verdict
+              </button>
+              <button class="sectionBtn" data-section="study">
+                📖 How to Study
+              </button>
+              <button class="sectionBtn" data-section="vault">
+                🔐 The Vault
+              </button>
+            </div>
+            <div class="sectionContent show" data-content="explanation">
+              <div class="sectionTitle">💡 Explanation</div>
+              <div class="pre" data-expl="1"></div>
+            </div>
+            <div class="sectionContent" data-content="sources">
+              <div class="sectionTitle">📚 Sources</div>
+              <div class="pre" data-sources="1"></div>
+            </div>
+            <div class="sectionContent" data-content="verdict">
+              <div class="sectionTitle">⚖️ Verdict</div>
+              <div class="pre" data-verdict="1"></div>
+            </div>
+            <div class="sectionContent" data-content="study">
+              <div class="sectionTitle">📖 How to Study</div>
+              <div class="pre" data-study="1"></div>
+            </div>
+            <div class="sectionContent" data-content="vault">
+              <div class="sectionTitle">🔐 The Vault</div>
+              <div class="pre" data-vault="1"></div>
+            </div>
+            <div data-link></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <script>
+      // ============================================================================
+      // OPTIMIZED MCQ PRACTICE APP
+      // Performance improvements:
+      // 1. Template cloning instead of innerHTML
+      // 2. Debounced state persistence with batch updates
+      // 3. Optimized filter computation with caching
+      // 4. Virtual scrolling with efficient rendering
+      // 5. Reduced DOM manipulation and reflows
+      // ============================================================================
+
+      // ============================================================================
+      // STATE MANAGEMENT WITH BATCHING
+      // ============================================================================
+      class StateManager {
+        constructor(storageKey) {
+          this.storageKey = storageKey;
+          this.state = this.load();
+          this.pendingChanges = new Map();
+          this.saveTimeout = null;
+          this.SAVE_DEBOUNCE = 500; // ms
+        }
+
+        load() {
+          try {
+            return JSON.parse(localStorage.getItem(this.storageKey) || "{}");
+          } catch (e) {
+            console.error("Failed to load state:", e);
+            return {};
+          }
+        }
+
+        get(qid) {
+          // Check pending first for most recent data
+          if (this.pendingChanges.has(qid)) {
+            const value = this.pendingChanges.get(qid);
+            return value === null ? { eliminated: {} } : value;
+          }
+          return this.state[qid] || { eliminated: {} };
+        }
+
+        set(qid, value) {
+          this.pendingChanges.set(qid, value);
+          this.scheduleSave();
+        }
+
+        delete(qid) {
+          this.pendingChanges.set(qid, null);
+          this.scheduleSave();
+        }
+
+        scheduleSave() {
+          if (this.saveTimeout) {
+            clearTimeout(this.saveTimeout);
+          }
+          this.saveTimeout = setTimeout(() => this.flush(), this.SAVE_DEBOUNCE);
+        }
+
+        flush() {
+          const t0 = performance.now();
+
+          // Apply all pending changes
+          for (const [qid, value] of this.pendingChanges.entries()) {
+            if (value === null) {
+              delete this.state[qid];
+            } else {
+              this.state[qid] = value;
+            }
+          }
+
+          // Save to localStorage
+          try {
+            localStorage.setItem(this.storageKey, JSON.stringify(this.state));
+          } catch (e) {
+            console.error("Failed to save state:", e);
+          }
+
+          this.pendingChanges.clear();
+        }
+
+        clear() {
+          this.state = {};
+          this.pendingChanges.clear();
+          localStorage.removeItem(this.storageKey);
+        }
+
+        getStats() {
+          // Force flush to get accurate stats
+          if (this.pendingChanges.size > 0) {
+            this.flush();
+          }
+
+          let attempted = 0,
+            correct = 0,
+            wrong = 0;
+          for (const qid in this.state) {
+            const entry = this.state[qid];
+            if (entry && entry.answer) {
+              attempted++;
+              if (entry.isCorrect) correct++;
+              else wrong++;
+            }
+          }
+          const accuracy =
+            attempted > 0 ? Math.round((correct / attempted) * 100) : 0;
+          return { attempted, correct, wrong, accuracy };
+        }
+      }
+
+      const STORAGE_KEY = "examrobot_practice_v4_optimized";
+      const stateManager = new StateManager(STORAGE_KEY);
+
+      // Save on page unload
+      window.addEventListener("beforeunload", () => {
+        stateManager.flush();
+      });
+
+      // ============================================================================
+      // UI ENHANCEMENTS
+      // ============================================================================
+      function showToast(message) {
+        const toast = document.getElementById("toast");
+        if (!toast) return;
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(showToast._timer);
+        showToast._timer = setTimeout(
+          () => toast.classList.remove("show"),
+          1800,
+        );
+      }
+
+      async function copyTextToClipboard(text) {
+        const value = String(text || "").trim();
+        if (!value) return false;
+
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(value);
+            return true;
+          }
+        } catch (err) {
+          console.warn("Clipboard API failed, falling back.", err);
+        }
+
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = value;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.left = "-9999px";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand("copy");
+          ta.remove();
+          return ok;
+        } catch (err) {
+          console.error("Clipboard fallback failed:", err);
+          return false;
+        }
+      }
+
+      function spawnConfetti() {
+        for (let i = 0; i < 18; i++) {
+          const piece = document.createElement("div");
+          piece.style.position = "fixed";
+          piece.style.width = "8px";
+          piece.style.height = "10px";
+          piece.style.left = `${10 + Math.random() * 80}vw`;
+          piece.style.top = "-20px";
+          piece.style.opacity = "0.9";
+          piece.style.pointerEvents = "none";
+          piece.style.zIndex = "500";
+          piece.style.background = ["#58a6ff", "#3fb950", "#e3b341", "#f85149"][
+            i % 4
+          ];
+          piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+          piece.style.transition = `transform ${2200 + Math.random() * 1200}ms linear, top ${2200 + Math.random() * 1200}ms linear, opacity 3000ms ease-out`;
+          document.body.appendChild(piece);
+          requestAnimationFrame(() => {
+            piece.style.top = "105vh";
+            piece.style.transform = `translateX(${(Math.random() - 0.5) * 160}px) rotate(${Math.random() * 960}deg)`;
+            piece.style.opacity = "0";
+          });
+          setTimeout(() => piece.remove(), 3200);
+        }
+      }
+
+      // ============================================================================
+      // DATA STRUCTURES
+      // ============================================================================
+      let DATA = [];
+      let ROWS = [];
+      const FACET_KEYS = ["exam", "year", "subject", "theme", "topic"];
+      const SEARCHABLE_FIELDS = [
+        "exam_robot_question",
+        "exam_robot_option_a",
+        "exam_robot_option_b",
+        "exam_robot_option_c",
+        "exam_robot_option_d",
+        "exam_robot_explanation",
+        "exam_robot_verdict",
+        "exam_robot_how_to_study",
+        "exam_robot_vault",
+        "exam_robot_answer_sources",
+      ];
+
+      // Diagnostic logging on DOM ready
+      document.addEventListener("DOMContentLoaded", function () {
+        console.log("[DOMContentLoaded] Page ready");
+        console.log("[DOMContentLoaded] Elements found:");
+        console.log("  - #count:", !!document.getElementById("count"));
+        console.log("  - #attempted:", !!document.getElementById("attempted"));
+        console.log("  - #correct:", !!document.getElementById("correct"));
+        console.log("  - #wrong:", !!document.getElementById("wrong"));
+        console.log("  - #accuracy:", !!document.getElementById("accuracy"));
+        console.log(
+          "  - #topicsPanel:",
+          !!document.getElementById("topicsPanel"),
+        );
+        console.log(
+          "  - #progressPanel:",
+          !!document.getElementById("progressPanel"),
+        );
+        console.log(
+          "  - .sidebar-panel.active:",
+          document.querySelectorAll(".sidebar-panel.active").length,
+        );
+
+        // Test: Initialize with sample data after a delay to ensure everything is ready
+        setTimeout(function () {
+          console.log("[TEST] Initializing sidebar with sample data");
+          // Set sample stats
+          const countEl = document.getElementById("count");
+          const attemptedEl = document.getElementById("attempted");
+          const correctEl = document.getElementById("correct");
+          const wrongEl = document.getElementById("wrong");
+          const accuracyEl = document.getElementById("accuracy");
+
+          if (countEl) {
+            countEl.textContent = "247";
+            console.log("[TEST] Set #count to 247");
+          }
+          if (attemptedEl) {
+            attemptedEl.textContent = "89";
+            console.log("[TEST] Set #attempted to 89");
+          }
+          if (correctEl) {
+            correctEl.textContent = "67";
+            console.log("[TEST] Set #correct to 67");
+          }
+          if (wrongEl) {
+            wrongEl.textContent = "22";
+            console.log("[TEST] Set #wrong to 22");
+          }
+          if (accuracyEl) {
+            accuracyEl.textContent = "75%";
+            console.log("[TEST] Set #accuracy to 75%");
+          }
+
+          // Set sample topics
+          const topicsPanel = document.getElementById("topicsPanel");
+          if (topicsPanel) {
+            topicsPanel.innerHTML = `
+              <div class="sidebarTopicItem">Database Design <span style="color: var(--accent-primary); font-weight: 600;">(45)</span></div>
+              <div class="sidebarTopicItem">SQL Queries <span style="color: var(--accent-primary); font-weight: 600;">(38)</span></div>
+              <div class="sidebarTopicItem">Normalization <span style="color: var(--accent-primary); font-weight: 600;">(32)</span></div>
+            `;
+            console.log("[TEST] Set sample topics");
+          }
+
+          // Set sample progress
+          const progressPanel = document.getElementById("progressPanel");
+          if (progressPanel) {
+            progressPanel.innerHTML = `
+              <div class="sidebarProgressItem">📚 Exams: <span class="sidebarProgressValue">12</span></div>
+              <div class="sidebarProgressItem">🏷️ Subjects: <span class="sidebarProgressValue">8</span></div>
+              <div class="sidebarProgressItem">📊 Avg Accuracy: <span class="sidebarProgressValue">75%</span></div>
+              <div class="sidebarProgressItem">🎯 Attempted: <span class="sidebarProgressValue">89</span></div>
+            `;
+            console.log("[TEST] Set sample progress");
+          }
+        }, 500);
+      });
+      const SEARCH_SETTINGS_KEY = "mcq_search_settings_v1";
+
+      let searchSettings = {
+        scopeQuestion: true,
+        scopeOptions: true,
+        scopeExplanation: true,
+        highlight: false,
+      };
+
+      function loadSearchSettings() {
+        try {
+          const raw = localStorage.getItem(SEARCH_SETTINGS_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          searchSettings = {
+            ...searchSettings,
+            ...parsed,
+          };
+        } catch (e) {
+          console.warn("Failed to parse search settings", e);
+        }
+      }
+
+      function saveSearchSettings() {
+        try {
+          localStorage.setItem(
+            SEARCH_SETTINGS_KEY,
+            JSON.stringify(searchSettings),
+          );
+        } catch (e) {
+          console.warn("Failed to save search settings", e);
+        }
+      }
+
+      function getEffectiveScopes() {
+        if (
+          searchSettings.scopeQuestion ||
+          searchSettings.scopeOptions ||
+          searchSettings.scopeExplanation
+        ) {
+          return {
+            scopeQuestion: !!searchSettings.scopeQuestion,
+            scopeOptions: !!searchSettings.scopeOptions,
+            scopeExplanation: !!searchSettings.scopeExplanation,
+          };
+        }
+        return {
+          scopeQuestion: true,
+          scopeOptions: true,
+          scopeExplanation: true,
+        };
+      }
+
+      // ============================================================================
+      // UTILITY FUNCTIONS
+      // ============================================================================
+      const htmlEscapes = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      };
+      function escapeHtml(s) {
+        return (s ?? "").toString().replace(/[&<>"']/g, (m) => htmlEscapes[m]);
+      }
+
+      function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+      }
+
+      function throttle(func, limit) {
+        let inThrottle;
+        return function (...args) {
+          if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => (inThrottle = false), limit);
+          }
+        };
+      }
+
+      // ============================================================================
+      // SEARCH INDEX + WEB WORKER
+      // ============================================================================
+      function tokenizeSearchText(value) {
+        return Array.from(
+          new Set(
+            String(value || "")
+              .toLowerCase()
+              .split(/[^\p{L}\p{N}]+/u)
+              .map((token) => token.trim())
+              .filter((token) => token.length > 1),
+          ),
+        );
+      }
+
+      function buildSearchRows(data) {
+        const t0 = performance.now();
+        const rows = data.map((r, index) => {
+          return {
+            index,
+            record: r,
+            // Only keep metadata needed for filtering in the main thread
+            exam: r.exam_robot_exam || "",
+            year: r.exam_robot_year || "",
+            subject: r.exam_robot_subject || "",
+            theme: r.exam_robot_theme || "",
+            topic: (r.exam_robot_topic || "").trim(),
+          };
+        });
+
+        return rows;
+      }
+
+      const SEARCH_WORKER_SCRIPT = `
+        // ==================== INDUSTRY-GRADE SEARCH ENGINE v2 ====================
+        // Features: BM25 Relevance Ranking, Field Boosting, Inverted Index, Galloping Search
+        // Optimized for 50,000+ documents with sub-millisecond search times
+        
+        let rows = [];
+        let indexes = { question: new Map(), options: new Map(), explanation: new Map() };
+        // Parallel arrays to indexes to store Term Frequencies (TF) for BM25
+        let termFreqs = { question: new Map(), options: new Map(), explanation: new Map() };
+        let docFrequency = { question: new Map(), options: new Map(), explanation: new Map() };
+        let docLengths = { question: [], options: [], explanation: [] };
+        let avgFieldLength = { question: 0, options: 0, explanation: 0 };
+        
+        // BM25 Constants & Field Weights
+        const k1 = 1.2;
+        const b = 0.75;
+        const FIELD_WEIGHTS = { question: 10.0, options: 2.0, explanation: 1.0 };
+        const FACET_KEYS = ["exam", "year", "subject", "theme", "topic"];
+        
+        // Porter Stemmer-like simple stemming for better matching
+        const stemCache = new Map();
+        function stem(word) {
+          if (stemCache.has(word)) return stemCache.get(word);
+          let w = word.toLowerCase();
+          // Remove common suffixes for better matching
+          w = w.replace(/(?:ies|es|s)$/, '');
+          w = w.replace(/(?:ing|ed)$/, '');
+          stemCache.set(word, w);
+          return w;
+        }
+
+        // Advanced tokenization with frequency counting
+        function analyze(text) {
+          const counts = new Map();
+          const words = String(text || "")
+            .toLowerCase()
+            .split(/[^\\p{L}\\p{N}]+/u)
+            .map(w => w.trim())
+            .filter(w => w.length > 1);
+          
+          let length = 0;
+          for (const word of words) {
+            length++;
+            const tokens = [];
+            // Add stemmed version
+            tokens.push(stem(word));
+            // Add original for exact matching
+            if (word.length > 3) tokens.push(word);
+            // Add bi-grams for partial matching (only for longer words)
+            if (word.length > 4) {
+              for (let i = 0; i < word.length - 2; i++) {
+                tokens.push(word.slice(i, i + 3));
+              }
+            }
+            
+            for (const t of tokens) {
+               counts.set(t, (counts.get(t) || 0) + 1);
+            }
+          }
+          return { counts, length };
+        }
+
+        // Build inverted index with skip pointers for faster intersection
+        function buildIndexes(payloadRows) {
+          const tStart = performance.now();
+          rows = payloadRows;
+          
+          // Reset all structures
+          ['question', 'options', 'explanation'].forEach(scope => {
+             indexes[scope] = new Map();
+             termFreqs[scope] = new Map();
+             docFrequency[scope] = new Map();
+             docLengths[scope] = new Uint16Array(rows.length);
+             avgFieldLength[scope] = 0;
+          });
+          
+          const SKIP_INTERVAL = 8; // Skip pointer every 8 entries
+          
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const r = row.record || {};
+            
+            // Generate scopes inside the worker to save main thread memory/cpu
+            const scopeMap = {
+              question: r.exam_robot_question || "",
+              options: [
+                r.exam_robot_option_a, r.exam_robot_option_b, 
+                r.exam_robot_option_c, r.exam_robot_option_d
+              ].filter(Boolean).join("\\n"),
+              explanation: [
+                r.exam_robot_explanation, r.exam_robot_verdict,
+                r.exam_robot_how_to_study, r.exam_robot_vault,
+                r.exam_robot_answer_sources
+              ].filter(Boolean).join("\\n"),
+            };
+            
+            for (const scope of Object.keys(scopeMap)) {
+              const { counts, length } = analyze(scopeMap[scope]);
+              docLengths[scope][i] = length;
+              avgFieldLength[scope] += length;
+              
+              for (const [token, freq] of counts) {
+                if (!indexes[scope].has(token)) {
+                  indexes[scope].set(token, []);
+                  termFreqs[scope].set(token, []);
+                  docFrequency[scope].set(token, 0);
+                }
+                indexes[scope].get(token).push(i);
+                termFreqs[scope].get(token).push(freq);
+                docFrequency[scope].set(token, docFrequency[scope].get(token) + 1);
+              }
+            }
+          }
+          
+          // Finalize averages and skips
+          for (const scope of Object.keys(indexes)) {
+            if (rows.length > 0) avgFieldLength[scope] /= rows.length;
+            
+            for (const [token, postings] of indexes[scope]) {
+              if (postings.length > SKIP_INTERVAL * 2) {
+                const skips = [];
+                for (let i = SKIP_INTERVAL; i < postings.length; i += SKIP_INTERVAL) {
+                  skips.push({ pos: i, value: postings[i] });
+                }
+                postings._skips = skips;
+              }
+            }
+          }
+        }
+
+        // Galloping search (exponential search) for faster intersection
+        function gallopingSearch(arr, target, start = 0) {
+          if (start >= arr.length) return -1;
+          
+          // Use skip pointers if available
+          if (arr._skips && arr._skips.length > 0) {
+            const skips = arr._skips;
+            let skipIdx = 0;
+            while (skipIdx < skips.length && skips[skipIdx].value < target) {
+              skipIdx++;
+            }
+            if (skipIdx > 0) start = skips[skipIdx - 1].pos;
+          }
+          
+          // Exponential search
+          let bound = 1;
+          while (start + bound < arr.length && arr[start + bound] < target) {
+            bound *= 2;
+          }
+          
+          // Binary search in the bounded range
+          let left = start + Math.floor(bound / 2);
+          let right = Math.min(start + bound, arr.length - 1);
+          
+          while (left <= right) {
+            const mid = Math.floor((left + right) / 2);
+            if (arr[mid] === target) return mid;
+            if (arr[mid] < target) left = mid + 1;
+            else right = mid - 1;
+          }
+          return left;
+        }
+
+        // Optimized intersection using galloping search (2-10x faster than linear)
+        function intersectSortedGalloping(a, b) {
+          if (!a.length || !b.length) return [];
+          
+          // Always iterate over the shorter list
+          if (a.length > b.length) [a, b] = [b, a];
+          
+          const result = [];
+          let posA = 0, posB = 0;
+          
+          while (posA < a.length && posB < b.length) {
+            const valA = a[posA];
+            
+            // Use galloping search to find valA in b
+            posB = gallopingSearch(b, valA, posB);
+            
+            if (posB >= b.length) break;
+            if (b[posB] === valA) {
+              result.push(valA);
+              posA++;
+              posB++;
+            } else {
+              posA++;
+            }
+          }
+          
+          return result;
+        }
+
+        // Optimized multi-way merge using priority queue (min-heap)
+        function mergeSortedUnique(lists) {
+          if (lists.length === 0) return [];
+          if (lists.length === 1) return lists[0];
+          if (lists.length === 2) {
+            // Use union for OR operation
+            const result = [];
+            let i = 0, j = 0;
+            while (i < lists[0].length || j < lists[1].length) {
+              if (i >= lists[0].length) {
+                result.push(lists[1][j++]);
+              } else if (j >= lists[1].length) {
+                result.push(lists[0][i++]);
+              } else if (lists[0][i] < lists[1][j]) {
+                result.push(lists[0][i++]);
+              } else if (lists[0][i] > lists[1][j]) {
+                result.push(lists[1][j++]);
+              } else {
+                result.push(lists[0][i++]);
+                j++;
+              }
+            }
+            return result;
+          }
+          
+          // Min-heap implementation for efficient k-way merge
+          const heap = [];
+          const result = [];
+          
+          // Initialize heap with first element from each list
+          for (let i = 0; i < lists.length; i++) {
+            if (lists[i].length > 0) {
+              heap.push({ value: lists[i][0], listIdx: i, elemIdx: 0 });
+            }
+          }
+          
+          // Build initial heap
+          heap.sort((a, b) => a.value - b.value);
+          
+          let lastValue = -1;
+          while (heap.length > 0) {
+            // Extract min
+            const min = heap.shift();
+            
+            // Add to result if unique
+            if (min.value !== lastValue) {
+              result.push(min.value);
+              lastValue = min.value;
+            }
+            
+            // Add next element from same list
+            const nextIdx = min.elemIdx + 1;
+            if (nextIdx < lists[min.listIdx].length) {
+              const newElem = { value: lists[min.listIdx][nextIdx], listIdx: min.listIdx, elemIdx: nextIdx };
+              
+              // Insert in sorted position
+              let insertPos = 0;
+              while (insertPos < heap.length && heap[insertPos].value < newElem.value) {
+                insertPos++;
+              }
+              heap.splice(insertPos, 0, newElem);
+            }
+          }
+          
+          return result;
+        }
+
+        // Build search candidates with query optimization
+        function buildSearchCandidates(tokens, scopes) {
+          if (!tokens.length) return rows.map((_, idx) => idx);
+          
+          const activeScopes = [];
+          if (scopes.scopeQuestion) activeScopes.push("question");
+          if (scopes.scopeOptions) activeScopes.push("options");
+          if (scopes.scopeExplanation) activeScopes.push("explanation");
+          if (!activeScopes.length) activeScopes.push("question", "options", "explanation");
+
+          let candidates = null;
+          
+          // Sort tokens by document frequency (process rare terms first for faster elimination)
+          const tokenStats = tokens.map(token => {
+            let freq = 0;
+            for (const scope of activeScopes) {
+              freq += docFrequency[scope].get(token) || 0;
+            }
+            return { token, freq };
+          });
+          tokenStats.sort((a, b) => a.freq - b.freq);
+
+          for (const {token} of tokenStats) {
+            const postings = [];
+            
+            // Collect postings from all active scopes
+            for (const scope of activeScopes) {
+              const list = indexes[scope].get(token);
+              if (list && list.length) postings.push(list);
+            }
+            
+            if (!postings.length) return []; // No documents match this token
+            
+            // Union postings from different scopes (OR operation)
+            let tokenUnion;
+            if (postings.length === 1) {
+              tokenUnion = postings[0];
+            } else {
+              postings.sort((a, b) => a.length - b.length);
+              tokenUnion = mergeSortedUnique(postings);
+            }
+            
+            if (!tokenUnion.length) return [];
+            
+            // Intersect with existing candidates (AND operation)
+            if (candidates === null) {
+              candidates = tokenUnion;
+            } else {
+              candidates = intersectSortedGalloping(candidates, tokenUnion);
+              if (!candidates.length) return []; // Early termination
+            }
+          }
+          
+          return candidates || [];
+        }
+
+        function computeFacets(candidates, filters) {
+          const results = {};
+          FACET_KEYS.forEach(k => results[k] = []);
+          
+          const counts = {};
+          FACET_KEYS.forEach(k => counts[k] = new Map());
+
+          // 1. Identify active filters
+          const activeFilters = {};
+          FACET_KEYS.forEach(key => {
+            if (filters[key] && filters[key].length > 0) {
+              activeFilters[key] = new Set(filters[key]);
+            }
+          });
+
+          // 2. Single pass over candidates (O(N) instead of O(N * K))
+          for (let i = 0; i < candidates.length; i++) {
+            const idx = candidates[i];
+            const row = rows[idx];
+            
+            let failCount = 0;
+            let failedFilterKey = null;
+            
+            // Check against all active filters
+            for (const key in activeFilters) {
+                if (!activeFilters[key].has(row[key])) {
+                    failCount++;
+                    failedFilterKey = key;
+                    if (failCount > 1) break; // Optimization: stop checking if already failed > 1
+                }
+            }
+            
+            if (failCount === 0) {
+                // Matches ALL filters. Contributes to ALL facets.
+                for (const key of FACET_KEYS) {
+                    const val = row[key];
+                    if (val) counts[key].set(val, (counts[key].get(val) || 0) + 1);
+                }
+            } else if (failCount === 1) {
+                // Fails exactly one filter. Contributes ONLY to that one facet.
+                // (e.g. if it fails 'exam', it contributes to 'exam' counts, allowing the user to see other exams)
+                const val = row[failedFilterKey];
+                if (val) counts[failedFilterKey].set(val, (counts[failedFilterKey].get(val) || 0) + 1);
+            }
+          }
+
+          // 3. Format results
+          FACET_KEYS.forEach(key => {
+             results[key] = Array.from(counts[key].entries()).map(([value, count]) => ({ value, count }));
+          });
+          
+          return results;
+        }
+
+        function runSearch(payload) {
+          const { requestId, tokens, scopes, filters } = payload;
+          const tStart = performance.now();
+          
+          const candidates = buildSearchCandidates(tokens, scopes);
+          
+          // BM25 Ranking Phase
+          if (tokens.length > 0 && candidates.length > 0) {
+             const scores = new Float32Array(rows.length);
+             const activeScopes = [];
+             if (scopes.scopeQuestion) activeScopes.push("question");
+             if (scopes.scopeOptions) activeScopes.push("options");
+             if (scopes.scopeExplanation) activeScopes.push("explanation");
+             
+             // Fast lookup for candidates
+             const isCandidate = new Uint8Array(rows.length);
+             for (let i = 0; i < candidates.length; i++) isCandidate[candidates[i]] = 1;
+             
+             for (const token of tokens) {
+                // Match both exact and stemmed forms
+                const searchTerms = [token, stem(token)];
+                
+                for (const term of searchTerms) {
+                    for (const scope of activeScopes) {
+                        const postings = indexes[scope].get(term);
+                        if (!postings) continue;
+                        
+                        const freqs = termFreqs[scope].get(term);
+                        const N = rows.length;
+                        const n = docFrequency[scope].get(term);
+                        const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
+                        const avgDl = avgFieldLength[scope] || 1;
+                        const weight = FIELD_WEIGHTS[scope];
+                        
+                        for (let k = 0; k < postings.length; k++) {
+                            const docIdx = postings[k];
+                            if (isCandidate[docIdx]) {
+                                const tf = freqs[k];
+                                const dl = docLengths[scope][docIdx];
+                                const score = idf * ( (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgDl))) );
+                                scores[docIdx] += score * weight;
+                            }
+                        }
+                    }
+                }
+             }
+             // Sort candidates by score descending
+             candidates.sort((a, b) => scores[b] - scores[a]);
+          }
+
+          const firstBatch = [];
+          const allMatches = [];
+          
+          // Prepare filter sets for fast checking
+          const activeFilters = {};
+          let hasFilters = false;
+          FACET_KEYS.forEach(key => {
+            if (filters[key] && filters[key].length > 0) {
+              activeFilters[key] = new Set(filters[key]);
+              hasFilters = true;
+            }
+          });
+          
+          // Apply filters
+          for (let i = 0; i < candidates.length; i++) {
+            const idx = candidates[i];
+            const row = rows[idx];
+            
+            let match = true;
+            if (hasFilters) {
+                for (const key in activeFilters) {
+                    if (!activeFilters[key].has(row[key])) {
+                        match = false;
+                        break;
+                    }
+                }
+            }
+            
+            if (!match) continue;
+            
+            allMatches.push(idx);
+            if (firstBatch.length < 50) firstBatch.push(idx);
+          }
+
+          const facets = computeFacets(candidates, filters);
+          const queryMs = performance.now() - tStart;
+
+          postMessage({ 
+            type: "FIRST_BATCH", 
+            requestId, 
+            indices: firstBatch, 
+            count: allMatches.length, 
+            candidates, 
+            queryMs 
+          });
+          
+          postMessage({ 
+            type: "SEARCH_DONE", 
+            requestId, 
+            indices: allMatches, 
+            count: allMatches.length, 
+            candidates, 
+            queryMs,
+            facets
+          });
+        }
+
+        self.onmessage = (event) => {
+          const payload = event.data || {};
+          if (payload.type === "INIT") {
+            buildIndexes(payload.rows || []);
+            postMessage({ type: "INIT_DONE", count: rows.length });
+            return;
+          }
+          if (payload.type === "SEARCH") runSearch(payload);
+        };
+      `;
+
+      let searchWorker = null;
+      let searchWorkerReady = false;
+      let lastSearchRequestId = 0;
+      let pendingSearchInputAt = null;
+      let pendingFacetOpenAt = null;
+      let latestSearchCandidateIndices = [];
+      let latestSearchCandidatesKey = null;
+      let latestFilteredRecords = [];
+      let latestFacetsKey = null; // Track if facets match the current search
+      const SEARCH_CACHE_MAX_ENTRIES = 250;
+      const searchResultCache = new Map();
+      let ALL_ROW_INDICES = [];
+
+      function invalidateSearchCache(reason = "unknown") {
+        searchResultCache.clear();
+        latestSearchCandidatesKey = null;
+        latestFacetsKey = null;
+        facetCountsCache.key = "";
+      }
+
+      function getSearchCacheKey(searchTextLower, scopes, filters) {
+        const filterKey = FACET_KEYS.map(
+          (key) => `${key}:${(filters[key] || []).slice().sort().join("|")}`,
+        ).join("::");
+        return [
+          searchTextLower,
+          `q:${Number(scopes.scopeQuestion)}`,
+          `o:${Number(scopes.scopeOptions)}`,
+          `e:${Number(scopes.scopeExplanation)}`,
+          filterKey,
+        ].join("||");
+      }
+
+      function getSearchCandidatesKey(searchTextLower, scopes) {
+        return [
+          searchTextLower,
+          `q:${Number(scopes.scopeQuestion)}`,
+          `o:${Number(scopes.scopeOptions)}`,
+          `e:${Number(scopes.scopeExplanation)}`,
+        ].join("||");
+      }
+
+      function getCachedSearchResult(cacheKey) {
+        if (!searchResultCache.has(cacheKey)) return null;
+        const value = searchResultCache.get(cacheKey);
+        searchResultCache.delete(cacheKey);
+        searchResultCache.set(cacheKey, value);
+        return value;
+      }
+
+      function setCachedSearchResult(cacheKey, payload) {
+        if (!cacheKey) return;
+        if (searchResultCache.has(cacheKey)) {
+          searchResultCache.delete(cacheKey);
+        }
+        searchResultCache.set(cacheKey, payload);
+        if (searchResultCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+          const oldestKey = searchResultCache.keys().next().value;
+          searchResultCache.delete(oldestKey);
+        }
+      }
+
+      function initSearchWorker(rows) {
+        if (searchWorker) {
+          searchWorkerReady = false;
+          searchWorker.postMessage({ type: "INIT", rows });
+          return;
+        }
+
+        const blob = new Blob([SEARCH_WORKER_SCRIPT], {
+          type: "application/javascript",
+        });
+        const workerUrl = URL.createObjectURL(blob);
+        searchWorker = new Worker(workerUrl);
+        URL.revokeObjectURL(workerUrl);
+
+        searchWorkerReady = false;
+        searchWorker.onmessage = (event) => {
+          const payload = event.data || {};
+          if (payload.type === "INIT_DONE") {
+            searchWorkerReady = true;
+
+            scheduleFilteredUpdate();
+            return;
+          }
+
+          if (payload.requestId !== lastSearchRequestId) return;
+
+          if (payload.type === "FIRST_BATCH") {
+            const firstBatchRecords = (payload.indices || []).map(
+              (idx) => ROWS[idx].record,
+            );
+            latestSearchCandidateIndices = payload.candidates || [];
+            latestSearchCandidatesKey =
+              searchWorker._activeCandidatesKey || null;
+            latestFilteredRecords = firstBatchRecords;
+            renderFilteredData(firstBatchRecords, {
+              partial: true,
+              totalCount: payload.count || firstBatchRecords.length,
+            });
+            return;
+          }
+
+          if (payload.type === "SEARCH_DONE") {
+            const allRecords = (payload.indices || []).map(
+              (idx) => ROWS[idx].record,
+            );
+            latestSearchCandidateIndices = payload.candidates || [];
+            latestSearchCandidatesKey =
+              searchWorker._activeCandidatesKey || null;
+            latestFilteredRecords = allRecords;
+            const cacheKey = searchWorker._activeCacheKey;
+
+            // Update facet cache from worker data
+            if (payload.facets) {
+              facetCountsCache.byFacet = payload.facets;
+              latestFacetsKey = searchWorker._activeCandidatesKey;
+            }
+
+            setCachedSearchResult(cacheKey, {
+              indices: payload.indices || [],
+              candidates: latestSearchCandidateIndices,
+              facets: payload.facets, // Cache facets too
+            });
+            renderFilteredData(allRecords, {
+              partial: false,
+              totalCount: payload.count || allRecords.length,
+            });
+          }
+        };
+
+        searchWorker.postMessage({ type: "INIT", rows });
+      }
+
+      // ============================================================================
+      // FILTER MANAGEMENT
+      // ============================================================================
+      let currentFilters = {
+        exam: [],
+        year: [],
+        subject: [],
+        theme: [],
+        topic: [],
+      };
+
+      let currentFilterSets = {
+        exam: new Set(),
+        year: new Set(),
+        subject: new Set(),
+        theme: new Set(),
+        topic: new Set(),
+      };
+
+      let facetValueUniverse = {
+        exam: [],
+        year: [],
+        subject: [],
+        theme: [],
+        topic: [],
+      };
+
+      function rebuildFilterSets() {
+        FACET_KEYS.forEach((key) => {
+          currentFilterSets[key] = new Set(currentFilters[key]);
+        });
+      }
+
+      function buildFacetValueUniverse() {
+        const t0 = performance.now();
+        const sets = {
+          exam: new Set(),
+          year: new Set(),
+          subject: new Set(),
+          theme: new Set(),
+          topic: new Set(),
+        };
+
+        for (let i = 0; i < ROWS.length; i++) {
+          const row = ROWS[i];
+          FACET_KEYS.forEach((key) => {
+            const value = row[key] || "";
+            if (value) sets[key].add(value);
+          });
+        }
+
+        FACET_KEYS.forEach((key) => {
+          facetValueUniverse[key] = Array.from(sets[key]).sort((a, b) =>
+            a.localeCompare(b, undefined, {
+              numeric: true,
+              sensitivity: "base",
+            }),
+          );
+        });
+      }
+
+      function rowMatchesFilters(row, filterSets, excludeFacetKey = null) {
+        if (
+          excludeFacetKey !== "exam" &&
+          filterSets.exam.size > 0 &&
+          !filterSets.exam.has(row.exam)
+        )
+          return false;
+        if (
+          excludeFacetKey !== "year" &&
+          filterSets.year.size > 0 &&
+          !filterSets.year.has(row.year)
+        )
+          return false;
+        if (
+          excludeFacetKey !== "subject" &&
+          filterSets.subject.size > 0 &&
+          !filterSets.subject.has(row.subject)
+        )
+          return false;
+        if (
+          excludeFacetKey !== "theme" &&
+          filterSets.theme.size > 0 &&
+          !filterSets.theme.has(row.theme)
+        )
+          return false;
+        if (
+          excludeFacetKey !== "topic" &&
+          filterSets.topic.size > 0 &&
+          !filterSets.topic.has(row.topic)
+        )
+          return false;
+        return true;
+      }
+
+      function getSearchTextLower() {
+        return (document.getElementById("clientSearch").value || "")
+          .trim()
+          .toLowerCase();
+      }
+
+      function getFiltersPayload() {
+        return {
+          exam: [...currentFilterSets.exam],
+          year: [...currentFilterSets.year],
+          subject: [...currentFilterSets.subject],
+          theme: [...currentFilterSets.theme],
+          topic: [...currentFilterSets.topic],
+        };
+      }
+
+      function escapeRegExp(value) {
+        return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+
+      let highlightCacheQuery = "";
+      let highlightCacheRegex = null;
+
+      function getHighlightRegex(searchTextLower) {
+        if (highlightCacheRegex && highlightCacheQuery === searchTextLower) {
+          return highlightCacheRegex;
+        }
+
+        const terms = tokenizeSearchText(searchTextLower);
+        if (!terms.length) {
+          highlightCacheQuery = searchTextLower;
+          highlightCacheRegex = null;
+          return null;
+        }
+
+        highlightCacheQuery = searchTextLower;
+        highlightCacheRegex = new RegExp(
+          `(${terms.map(escapeRegExp).join("|")})`,
+          "gi",
+        );
+        return highlightCacheRegex;
+      }
+
+      function highlightText(text, searchTextLower) {
+        const raw = String(text || "");
+        if (!searchSettings.highlight || !searchTextLower)
+          return escapeHtml(raw);
+
+        const regex = getHighlightRegex(searchTextLower);
+        if (!regex) return escapeHtml(raw);
+
+        let result = "";
+        let lastIndex = 0;
+        let match;
+        regex.lastIndex = 0;
+
+        while ((match = regex.exec(raw)) !== null) {
+          result += escapeHtml(raw.slice(lastIndex, match.index));
+          result += `<mark class="searchHit">${escapeHtml(match[0])}</mark>`;
+          lastIndex = regex.lastIndex;
+        }
+        result += escapeHtml(raw.slice(lastIndex));
+        return result;
+      }
+
+      function renderSearchText(el, text, searchTextLower) {
+        if (!el) return;
+        el.innerHTML = highlightText(text || "", searchTextLower);
+      }
+
+      function applyDeferredCardHighlights(card, searchTextLower) {
+        if (!card || card.dataset.deferredHighlightDone === "1") return;
+
+        card.querySelectorAll("[data-opt]").forEach((el) => {
+          renderSearchText(el, el.dataset.searchRaw || "", searchTextLower);
+        });
+
+        const explEl = card.querySelector('[data-expl="1"]');
+        if (explEl) {
+          renderSearchText(
+            explEl,
+            explEl.dataset.searchRaw || "",
+            searchTextLower,
+          );
+        }
+
+        card.dataset.deferredHighlightDone = "1";
+      }
+
+      function getBaseMatches(activeFilters, excludeFacetKey = null) {
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const expectedCandidatesKey = getSearchCandidatesKey(
+          searchTextLower,
+          scopes,
+        );
+        const source = !searchTextLower
+          ? ALL_ROW_INDICES
+          : latestSearchCandidatesKey === expectedCandidatesKey
+            ? latestSearchCandidateIndices
+            : [];
+        const indices = [];
+
+        for (let i = 0; i < source.length; i++) {
+          const row = ROWS[source[i]];
+          if (!rowMatchesFilters(row, activeFilters, excludeFacetKey)) continue;
+          indices.push(source[i]);
+        }
+        return indices;
+      }
+
+      function getFilteredData(excludeFilter = null) {
+        if (!excludeFilter) return latestFilteredRecords;
+        const indices = getBaseMatches(currentFilterSets, excludeFilter);
+        return indices.map((i) => ROWS[i].record);
+      }
+
+      function buildFallbackSearchCandidates(searchTextLower, scopes) {
+        const tokens = tokenizeSearchText(searchTextLower);
+        if (!tokens.length) return ALL_ROW_INDICES;
+
+        const activeScopes = [];
+        if (scopes.scopeQuestion) activeScopes.push("question");
+        if (scopes.scopeOptions) activeScopes.push("options");
+        if (scopes.scopeExplanation) activeScopes.push("explanation");
+        if (!activeScopes.length)
+          activeScopes.push("question", "options", "explanation");
+
+        const indices = [];
+        for (let i = 0; i < ROWS.length; i++) {
+          const row = ROWS[i];
+          const r = row.record;
+
+          // Generate text on-the-fly for fallback search (only runs if worker is slow/failed)
+          const questionText = (r.exam_robot_question || "").toLowerCase();
+          const optionsText = [
+            r.exam_robot_option_a,
+            r.exam_robot_option_b,
+            r.exam_robot_option_c,
+            r.exam_robot_option_d,
+          ]
+            .join(" ")
+            .toLowerCase();
+          const explanationText = [
+            r.exam_robot_explanation,
+            r.exam_robot_verdict,
+            r.exam_robot_how_to_study,
+          ]
+            .join(" ")
+            .toLowerCase();
+
+          const tokenFoundInActiveScope = (token) => {
+            if (
+              activeScopes.includes("question") &&
+              questionText.includes(token)
+            )
+              return true;
+            if (activeScopes.includes("options") && optionsText.includes(token))
+              return true;
+            if (
+              activeScopes.includes("explanation") &&
+              explanationText.includes(token)
+            )
+              return true;
+            return false;
+          };
+
+          let match = true;
+          for (let t = 0; t < tokens.length; t++) {
+            if (!tokenFoundInActiveScope(tokens[t])) {
+              match = false;
+              break;
+            }
+          }
+
+          if (match) indices.push(i);
+        }
+
+        return indices;
+      }
+
+      function runSearchPipeline() {
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const candidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
+
+        if (!searchWorkerReady || !searchWorker) {
+          const fallbackCandidates = buildFallbackSearchCandidates(
+            searchTextLower,
+            scopes,
+          );
+          const fallbackFiltered = [];
+          for (let i = 0; i < fallbackCandidates.length; i++) {
+            const idx = fallbackCandidates[i];
+            if (!rowMatchesFilters(ROWS[idx], currentFilterSets)) continue;
+            fallbackFiltered.push(ROWS[idx].record);
+          }
+
+          latestSearchCandidateIndices = fallbackCandidates;
+          latestSearchCandidatesKey = candidatesKey;
+          latestFacetsKey = null; // Fallback doesn't compute facets
+          latestFilteredRecords = fallbackFiltered;
+          renderFilteredData(fallbackFiltered, {
+            partial: false,
+            totalCount: fallbackFiltered.length,
+          });
+          return;
+        }
+
+        const filtersPayload = getFiltersPayload();
+        const cacheKey = getSearchCacheKey(
+          searchTextLower,
+          scopes,
+          filtersPayload,
+        );
+
+        const cached = getCachedSearchResult(cacheKey);
+        if (cached) {
+          latestSearchCandidateIndices = cached.candidates || [];
+          latestSearchCandidatesKey = candidatesKey;
+          if (cached.facets) {
+            facetCountsCache.byFacet = cached.facets;
+            latestFacetsKey = candidatesKey;
+          }
+
+          const cachedIndices = cached.indices || [];
+          latestFilteredRecords = cachedIndices.map((idx) => ROWS[idx].record);
+          renderFilteredData(latestFilteredRecords, {
+            partial: false,
+            totalCount: latestFilteredRecords.length,
+          });
+          return;
+        }
+
+        const requestId = ++lastSearchRequestId;
+        searchWorker._activeCacheKey = cacheKey;
+        searchWorker._activeCandidatesKey = candidatesKey;
+        searchWorker.postMessage({
+          type: "SEARCH",
+          requestId,
+          tokens: tokenizeSearchText(searchTextLower),
+          scopes,
+          filters: filtersPayload,
+        });
+      }
+
+      // ============================================================================
+      // TEMPLATE-BASED CARD RENDERING
+      // ============================================================================
+      const cardTemplate = document.getElementById("cardTemplate");
+
+      function getRecordId(r, index) {
+        return (
+          r.exam_robot_question_id ||
+          r.question_id ||
+          r.exam_robot_question_link ||
+          r.exam_robot_question_number ||
+          `idx-${index}`
+        );
+      }
+
+      function buildCard(record, index) {
+        const t0 = performance.now();
+        const qid = getRecordId(record, index);
+        const st = stateManager.get(qid);
+
+        // Clone template
+        const card = cardTemplate.content
+          .cloneNode(true)
+          .querySelector(".card");
+        card.dataset.qid = qid;
+
+        // Build metadata
+        const qmetaParts = [];
+        if (record.exam_robot_question_number)
+          qmetaParts.push("Q" + record.exam_robot_question_number);
+        if (record.exam_robot_exam) qmetaParts.push(record.exam_robot_exam);
+        if (record.exam_robot_year) qmetaParts.push(record.exam_robot_year);
+        if (record.exam_robot_subject)
+          qmetaParts.push(record.exam_robot_subject);
+        if (record.exam_robot_theme) qmetaParts.push(record.exam_robot_theme);
+        if (record.exam_robot_topic) qmetaParts.push(record.exam_robot_topic);
+        if (record.exam_robot_answer_status)
+          qmetaParts.push(record.exam_robot_answer_status);
+        const qmeta = qmetaParts.join(" · ");
+
+        // Set content using textContent (faster than innerHTML)
+        const qmetaEl = card.querySelector("[data-qmeta]");
+        qmetaEl.textContent = qmeta || "Question";
+        const searchTextLower = getSearchTextLower();
+        const qtextEl = card.querySelector("[data-qtext]");
+        qtextEl.dataset.searchRaw = record.exam_robot_question || "";
+        renderSearchText(
+          qtextEl,
+          record.exam_robot_question || "",
+          searchTextLower,
+        );
+        if (record.question_id || qid) {
+          qmetaEl.classList.add("copyableMeta");
+          qmetaEl.dataset.copyQid = String(record.question_id || qid);
+          qmetaEl.setAttribute("title", "Click to copy question_id");
+          qmetaEl.setAttribute("aria-label", "Click to copy question_id");
+        }
+
+        // Set options
+        const opts = {
+          A: record.exam_robot_option_a || "",
+          B: record.exam_robot_option_b || "",
+          C: record.exam_robot_option_c || "",
+          D: record.exam_robot_option_d || "",
+        };
+
+        for (const letter of ["A", "B", "C", "D"]) {
+          const optText = card.querySelector(`[data-opt="${letter}"]`);
+          if (optText) {
+            optText.dataset.searchRaw = opts[letter] || "";
+            optText.textContent = opts[letter] || "";
+          }
+
+          const optEl = card.querySelector(`[data-letter="${letter}"]`);
+          if (st.eliminated && st.eliminated[letter]) {
+            optEl.classList.add("strike");
+          }
+        }
+
+        // Set explanation content
+        const explEl = card.querySelector('[data-expl="1"]');
+        explEl.dataset.searchRaw =
+          record.exam_robot_explanation || "No explanation available";
+        explEl.textContent =
+          record.exam_robot_explanation || "No explanation available";
+        card.querySelector('[data-sources="1"]').textContent =
+          record.exam_robot_answer_sources || "No sources provided";
+        card.querySelector('[data-verdict="1"]').textContent =
+          record.exam_robot_verdict || "No verdict available";
+        card.querySelector('[data-study="1"]').textContent =
+          record.exam_robot_how_to_study || "No study guide available";
+        card.querySelector('[data-vault="1"]').textContent =
+          record.exam_robot_vault || "No vault content available";
+
+        // Set link if exists
+        if (record.exam_robot_question_link) {
+          const linkContainer = card.querySelector("[data-link]");
+          linkContainer.innerHTML = `<div class="muted" style="margin-top:6px;">🔗 <a target="_blank" rel="noopener" href="${escapeHtml(record.exam_robot_question_link)}">View Original Question</a></div>`;
+        }
+
+        const correctOpt = (record.exam_robot_correct_option || "")
+          .trim()
+          .toUpperCase();
+        card.dataset.correctOpt = correctOpt;
+        const resPanel = card.querySelector('[data-result="1"]');
+        const resText = card.querySelector('[data-result-text="1"]');
+
+        // Show result if answered
+        if (st.answer) {
+          card.dataset.answered = st.isCorrect ? "true" : "false";
+          resPanel.classList.add("show");
+          const isCorrect = !!st.isCorrect;
+          const badgeClass = isCorrect ? "success" : "error";
+          const badgeText = isCorrect ? "✅ Correct!" : "❌ Incorrect";
+          resText.innerHTML = `
+      <div class="resultHeader">
+        <div class="resultSummary">
+          <span class="resultBadge ${badgeClass}">${badgeText}</span>
+          <span>Your answer: <b>${escapeHtml(st.answer)}</b> · Correct answer: <b>${escapeHtml(correctOpt || "—")}</b></span>
+        </div>
+        <button class="smallbtn" data-collapse="1">Collapse</button>
+      </div>
+    `;
+
+          for (const optEl of card.querySelectorAll(".opt")) {
+            const letter = optEl.dataset.letter;
+            if (letter === correctOpt) optEl.classList.add("correct");
+            if (letter === st.answer && st.answer !== correctOpt)
+              optEl.classList.add("wrong");
+          }
+        }
+
+        // Event delegation handles card clicks at container level
+        applyDeferredCardHighlights(card, searchTextLower);
+
+        return card;
+      }
+
+      function handleCardSectionToggle(card, section, btn) {
+        card
+          .querySelectorAll("[data-section]")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        card
+          .querySelectorAll("[data-content]")
+          .forEach((c) => c.classList.remove("show"));
+        const content = card.querySelector(`[data-content="${section}"]`);
+        if (content) content.classList.add("show");
+      }
+
+      async function handleCardActionClick(e) {
+        const card = e.target.closest(".card");
+        if (!card) return;
+
+        const qid = card.dataset.qid || "";
+        const correctOpt = (card.dataset.correctOpt || "").toUpperCase();
+
+        const sectionBtn = e.target.closest("[data-section]");
+        if (sectionBtn) {
+          const section = sectionBtn.getAttribute("data-section");
+          if (section) handleCardSectionToggle(card, section, sectionBtn);
+          applyDeferredCardHighlights(card, getSearchTextLower());
+          return;
+        }
+
+        const titleEl = e.target.closest("[data-copy-qid]");
+        if (titleEl) {
+          const idToCopy = titleEl.getAttribute("data-copy-qid") || "";
+          const copied = await copyTextToClipboard(idToCopy);
+          showToast(
+            copied
+              ? `Copied question_id: ${idToCopy}`
+              : "Unable to copy question_id",
+          );
+          return;
+        }
+
+        const xBtn = e.target.closest("[data-x]");
+        if (xBtn) {
+          e.stopPropagation();
+          const letter = xBtn.getAttribute("data-x");
+          const cur = stateManager.get(qid);
+          cur.eliminated = cur.eliminated || {};
+          cur.eliminated[letter] = !cur.eliminated[letter];
+          stateManager.set(qid, cur);
+
+          const optEl = xBtn.closest(".opt");
+          if (optEl) optEl.classList.toggle("strike", cur.eliminated[letter]);
+          return;
+        }
+
+        const opt = e.target.closest(".opt");
+        if (opt && !e.target.closest("[data-x]")) {
+          if (opt.classList.contains("strike")) return;
+          const letter = opt.dataset.letter;
+          const cur = stateManager.get(qid);
+          cur.answer = letter;
+          cur.isCorrect = letter === correctOpt;
+          stateManager.set(qid, cur);
+
+          const resPanel = card.querySelector('[data-result="1"]');
+          const resText = card.querySelector('[data-result-text="1"]');
+
+          resPanel.classList.add("show");
+          const isCorrect = letter === correctOpt;
+          const badgeClass = isCorrect ? "success" : "error";
+          const badgeText = isCorrect ? "✅ Correct!" : "❌ Incorrect";
+          resText.innerHTML = `
+        <div class="resultHeader">
+          <div class="resultSummary">
+            <span class="resultBadge ${badgeClass}">${badgeText}</span>
+            <span>Your answer: <b>${escapeHtml(letter)}</b> · Correct answer: <b>${escapeHtml(correctOpt || "—")}</b></span>
+          </div>
+          <button class="smallbtn" data-collapse="1">Collapse</button>
+        </div>
+      `;
+
+          for (const optEl of card.querySelectorAll(".opt")) {
+            const L = optEl.dataset.letter;
+            optEl.classList.remove("correct", "wrong");
+            if (L === correctOpt) optEl.classList.add("correct");
+            if (L === letter && letter !== correctOpt)
+              optEl.classList.add("wrong");
+          }
+
+          card.dataset.answered = isCorrect ? "true" : "false";
+          applyDeferredCardHighlights(card, getSearchTextLower());
+          showToast(
+            isCorrect ? "Great job! Correct answer." : "Incorrect. Keep going!",
+          );
+          if (isCorrect) spawnConfetti();
+
+          setTimeout(() => {
+            resPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 100);
+
+          updateHeaderStats();
+          return;
+        }
+
+        const resetBtn = e.target.closest("[data-reset]");
+        if (resetBtn) {
+          if (
+            confirm(
+              "Reset this question? This will clear your answer and eliminations.",
+            )
+          ) {
+            stateManager.delete(qid);
+            scheduleFilteredUpdate();
+          }
+          return;
+        }
+
+        const collapseBtn = e.target.closest("[data-collapse]");
+        if (collapseBtn) {
+          const resPanel = card.querySelector('[data-result="1"]');
+          resPanel.classList.toggle("collapsed");
+          collapseBtn.textContent = resPanel.classList.contains("collapsed")
+            ? "Expand"
+            : "Collapse";
+          return;
+        }
+      }
+
+      document.getElementById("app").addEventListener("click", (e) => {
+        handleCardActionClick(e);
+      });
+
+      // Keyboard support for options (A11y)
+      document.getElementById("app").addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          const opt = e.target.closest(".opt");
+          if (opt && !e.target.closest(".xbtn")) {
+            e.preventDefault();
+            opt.click();
+          }
+        }
+      });
+
+      // ============================================================================
+      // RENDERING AND VIRTUAL SCROLLING
+      // ============================================================================
+      let currentFilteredRecords = [];
+      let renderCursor = 0;
+      let renderObserver = null;
+      let loadSentinel = null;
+      let emptyStateEl = null;
+      const MIN_BATCH_SIZE = 30;
+      const MAX_BATCH_SIZE = 200;
+      const RENDER_FRAME_BUDGET_MS = 16;
+
+      function buildEmptyStateElement() {
+        const emptyState = document.createElement("div");
+        emptyState.className = "emptyState isHidden";
+        emptyState.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <h3>No questions found</h3>
+    <p class="muted">Try adjusting your search or filters</p>
+  `;
+        return emptyState;
+      }
+
+      function renderNextBatch() {
+        const t0 = performance.now();
+        const app = document.getElementById("app");
+        const fragment = document.createDocumentFragment();
+        const deadline = t0 + RENDER_FRAME_BUDGET_MS;
+
+        let rendered = 0;
+        while (
+          renderCursor < currentFilteredRecords.length &&
+          rendered < MAX_BATCH_SIZE
+        ) {
+          fragment.appendChild(
+            buildCard(currentFilteredRecords[renderCursor], renderCursor),
+          );
+          renderCursor++;
+          rendered++;
+
+          if (rendered >= MIN_BATCH_SIZE && performance.now() >= deadline) {
+            break;
+          }
+        }
+
+        if (loadSentinel) loadSentinel.remove();
+        app.appendChild(fragment);
+
+        if (renderCursor < currentFilteredRecords.length) {
+          if (!loadSentinel) {
+            loadSentinel = document.createElement("div");
+            loadSentinel.style.height = "1px";
+          }
+          app.appendChild(loadSentinel);
+        }
+
+        const batchMs = performance.now() - t0;
+      }
+
+      function setupRenderObserver() {
+        if (renderObserver) {
+          renderObserver.disconnect();
+        }
+
+        renderObserver = new IntersectionObserver(
+          (entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+              renderNextBatch();
+            }
+          },
+          { rootMargin: "200px" },
+        ); // Pre-load earlier
+
+        if (loadSentinel) {
+          renderObserver.observe(loadSentinel);
+        }
+      }
+
+      function renderFilteredData(records, options = {}) {
+        if (renderObserver) {
+          renderObserver.disconnect();
+          renderObserver = null;
+        }
+
+        const t0 = performance.now();
+        const app = document.getElementById("app");
+        app.innerHTML = "";
+
+        currentFilteredRecords = records;
+        renderCursor = 0;
+
+        emptyStateEl = buildEmptyStateElement();
+        app.appendChild(emptyStateEl);
+
+        if (records.length === 0) {
+          emptyStateEl.classList.remove("isHidden");
+          updateHeaderStats(records, options.totalCount ?? records.length);
+          updateFilterButtons();
+          updateSidebarPanels();
+          if (activeFilterType && filterPopup.classList.contains("show")) {
+            renderFilterPopup();
+          }
+          if (pendingSearchInputAt !== null) {
+            pendingSearchInputAt = null;
+          }
+          return;
+        }
+
+        emptyStateEl.classList.add("isHidden");
+        updateHeaderStats(records, options.totalCount ?? records.length);
+        updateFilterButtons();
+        updateSidebarPanels();
+        if (activeFilterType && filterPopup.classList.contains("show")) {
+          renderFilterPopup();
+        }
+        renderNextBatch();
+
+        if (!options.partial) {
+          setupRenderObserver();
+        }
+
+        if (pendingSearchInputAt !== null) {
+          pendingSearchInputAt = null;
+        }
+      }
+
+      let pendingFilterUpdate = null;
+
+      function scheduleFilteredUpdate() {
+        if (pendingFilterUpdate) {
+          cancelAnimationFrame(pendingFilterUpdate);
+        }
+        pendingFilterUpdate = requestAnimationFrame(() => {
+          pendingFilterUpdate = null;
+          runSearchPipeline();
+          updateSidebarPanels();
+        });
+      }
+
+      // ============================================================================
+      // HEADER STATS UPDATE
+      // ============================================================================
+      function updateHeaderStats(filteredRecords = null, totalCount = null) {
+        console.log("[updateHeaderStats] Called");
+        const filtered = filteredRecords || getFilteredData();
+        const countVal = String(totalCount ?? filtered.length);
+
+        const countEl = document.getElementById("count");
+        console.log("[updateHeaderStats] countEl:", countEl);
+        if (countEl) countEl.textContent = countVal;
+        console.log("[updateHeaderStats] Set count to:", countVal);
+
+        const stats = stateManager.getStats();
+        console.log("[updateHeaderStats] stateManager.getStats():", stats);
+
+        const attemptedEl = document.getElementById("attempted");
+        const correctEl = document.getElementById("correct");
+        const wrongEl = document.getElementById("wrong");
+        const accuracyEl = document.getElementById("accuracy");
+
+        console.log(
+          "[updateHeaderStats] Elements found - attempted:",
+          !!attemptedEl,
+          "correct:",
+          !!correctEl,
+          "wrong:",
+          !!wrongEl,
+          "accuracy:",
+          !!accuracyEl,
+        );
+
+        if (attemptedEl) attemptedEl.textContent = stats.attempted.toString();
+        if (correctEl) correctEl.textContent = stats.correct.toString();
+        if (wrongEl) wrongEl.textContent = stats.wrong.toString();
+        if (accuracyEl) accuracyEl.textContent = stats.accuracy + "%";
+
+        console.log(
+          "[updateHeaderStats] Updated: attempted:",
+          stats.attempted,
+          "correct:",
+          stats.correct,
+          "wrong:",
+          stats.wrong,
+          "accuracy:",
+          stats.accuracy,
+        );
+
+        const stack = document.querySelector(".statsStack");
+        if (stack)
+          stack.style.setProperty("--progress", String(stats.accuracy));
+      }
+
+      // ============================================================================
+      // SIDEBAR PANEL UPDATES
+      // ============================================================================
+      function updateTopicsPanel() {
+        console.log(
+          "[updateTopicsPanel] Called, ROWS.length:",
+          ROWS ? ROWS.length : "ROWS undefined",
+        );
+        const topicsPanel = document.getElementById("topicsPanel");
+        console.log("[updateTopicsPanel] topicsPanel element:", topicsPanel);
+        if (!topicsPanel) {
+          console.warn("[updateTopicsPanel] topicsPanel element not found!");
+          return;
+        }
+
+        const topics = new Map();
+        ROWS.forEach((row) => {
+          const topic = row.record.exam_robot_topic?.trim();
+          if (topic) {
+            topics.set(topic, (topics.get(topic) || 0) + 1);
+          }
+        });
+
+        console.log("[updateTopicsPanel] topics map size:", topics.size);
+
+        const sortedTopics = Array.from(topics.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10);
+
+        console.log("[updateTopicsPanel] sortedTopics (top 10):", sortedTopics);
+
+        if (sortedTopics.length === 0) {
+          topicsPanel.innerHTML =
+            '<div class="sidebarEmpty">No topics available</div>';
+          console.log("[updateTopicsPanel] No topics, set empty message");
+          return;
+        }
+
+        const html = sortedTopics
+          .map(
+            ([topic, count]) =>
+              `<div class="sidebarTopicItem" title="Filter by ${topic}">${topic} <span style="color: var(--accent-primary); font-weight: 600;">(${count})</span></div>`,
+          )
+          .join("");
+
+        topicsPanel.innerHTML = html;
+        console.log(
+          "[updateTopicsPanel] Rendered HTML with",
+          sortedTopics.length,
+          "topics",
+        );
+      }
+
+      function updateProgressPanel() {
+        console.log(
+          "[updateProgressPanel] Called, ROWS.length:",
+          ROWS ? ROWS.length : "ROWS undefined",
+        );
+        const progressPanel = document.getElementById("progressPanel");
+        console.log(
+          "[updateProgressPanel] progressPanel element:",
+          progressPanel,
+        );
+        if (!progressPanel) {
+          console.warn(
+            "[updateProgressPanel] progressPanel element not found!",
+          );
+          return;
+        }
+
+        const stats = stateManager.getStats();
+        console.log("[updateProgressPanel] stats from stateManager:", stats);
+
+        const exams = new Set(
+          ROWS.map((r) => r.record.exam_robot_exam?.trim()).filter(Boolean),
+        );
+        const subjects = new Set(
+          ROWS.map((r) => r.record.exam_robot_subject?.trim()).filter(Boolean),
+        );
+
+        const examCount = exams.size;
+        const subjectCount = subjects.size;
+        const avgAccuracy = stats.accuracy;
+
+        console.log(
+          "[updateProgressPanel] examCount:",
+          examCount,
+          "subjectCount:",
+          subjectCount,
+          "avgAccuracy:",
+          avgAccuracy,
+          "attempted:",
+          stats.attempted,
+        );
+
+        const progressHTML = `
+          <div class="sidebarProgressItem">📚 Exams: <span class="sidebarProgressValue">${examCount}</span></div>
+          <div class="sidebarProgressItem">🏷️ Subjects: <span class="sidebarProgressValue">${subjectCount}</span></div>
+          <div class="sidebarProgressItem">📊 Avg Accuracy: <span class="sidebarProgressValue">${avgAccuracy}%</span></div>
+          <div class="sidebarProgressItem">🎯 Attempted: <span class="sidebarProgressValue">${stats.attempted}</span></div>
+        `;
+
+        progressPanel.innerHTML = progressHTML;
+        console.log("[updateProgressPanel] Updated HTML");
+      }
+
+      function updateSidebarPanels() {
+        console.log(
+          "[updateSidebarPanels] Called at",
+          new Date().toLocaleTimeString(),
+        );
+        updateTopicsPanel();
+        updateProgressPanel();
+        console.log("[updateSidebarPanels] Completed");
+      }
+
+      // ============================================================================
+      // FILTER POPUP MANAGEMENT
+      // ============================================================================
+      let activeFilterType = null;
+      let tempSelectionSet = new Set();
+      let popupSearchQuery = "";
+      let lastFocusedFilterTrigger = null;
+      let filterPopupIsDirty = false;
+
+      const filterPopup = document.getElementById("filterPopup");
+      const filterOverlay = document.getElementById("filterOverlay");
+      const filterPopupTitle = document.getElementById("filterPopupTitle");
+      const filterPopupList = document.getElementById("filterPopupList");
+      const filterPopupSearch = document.getElementById("filterPopupSearch");
+      const filterPopupTotal = document.getElementById("filterPopupTotal");
+      const filterSortToggle = document.getElementById("filterSortToggle");
+      const filterSortLabel = document.getElementById("filterSortLabel");
+
+      const sortStateByFilter = {
+        exam: 0,
+        year: 0,
+        subject: 0,
+        theme: 0,
+        topic: 0,
+      };
+
+      const facetCountsCache = {
+        key: "",
+        byFacet: {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        },
+      };
+
+      const filterLabels = {
+        exam: "Exam",
+        year: "Year",
+        subject: "Subject",
+        theme: "Themes",
+        topic: "Topics",
+      };
+
+      const filterPluralLabels = {
+        exam: "Exams",
+        year: "Years",
+        subject: "Subjects",
+        theme: "Themes",
+        topic: "Topics",
+      };
+
+      function getSortCycle(filterType) {
+        const isYear = filterType === "year";
+        if (isYear) {
+          return [
+            {
+              mode: "count",
+              dir: "desc",
+              glyph: "⇅",
+              label: "Count ↓",
+              title: "Sort: Count (High to Low)",
+              ariaLabel: "Sort: Count high to low",
+            },
+            {
+              mode: "count",
+              dir: "asc",
+              glyph: "⇅",
+              label: "Count ↑",
+              title: "Sort: Count (Low to High)",
+              ariaLabel: "Sort: Count low to high",
+            },
+            {
+              mode: "alpha",
+              dir: "desc",
+              glyph: "⇅",
+              label: "Year ↓",
+              title: "Sort: Year (High to Low)",
+              ariaLabel: "Sort: Year high to low",
+            },
+            {
+              mode: "alpha",
+              dir: "asc",
+              glyph: "⇅",
+              label: "Year ↑",
+              title: "Sort: Year (Low to High)",
+              ariaLabel: "Sort: Year low to high",
+            },
+          ];
+        }
+        return [
+          {
+            mode: "count",
+            dir: "desc",
+            glyph: "⇅",
+            label: "Count ↓",
+            title: "Sort: Count (High to Low)",
+            ariaLabel: "Sort: Count high to low",
+          },
+          {
+            mode: "count",
+            dir: "asc",
+            glyph: "⇅",
+            label: "Count ↑",
+            title: "Sort: Count (Low to High)",
+            ariaLabel: "Sort: Count low to high",
+          },
+          {
+            mode: "alpha",
+            dir: "asc",
+            glyph: "⇅",
+            label: "A–Z ↑",
+            title: "Sort: A to Z",
+            ariaLabel: "Sort: A to Z",
+          },
+          {
+            mode: "alpha",
+            dir: "desc",
+            glyph: "⇅",
+            label: "Z–A ↓",
+            title: "Sort: Z to A",
+            ariaLabel: "Sort: Z to A",
+          },
+        ];
+      }
+
+      function getCurrentSortState() {
+        if (!activeFilterType) {
+          return getSortCycle("exam")[0];
+        }
+        const cycle = getSortCycle(activeFilterType);
+        const idx = sortStateByFilter[activeFilterType] ?? 0;
+        return cycle[idx] || cycle[0];
+      }
+
+      function nextSortState(currentIndex, filterType) {
+        const cycle = getSortCycle(filterType);
+        return (currentIndex + 1) % cycle.length;
+      }
+
+      function makeFacetCountsStateKey() {
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const searchKey = getSearchCandidatesKey(searchTextLower, scopes);
+        const filterKey = FACET_KEYS.map((k) => {
+          const vals = [...currentFilterSets[k]].sort();
+          return `${k}:${vals.join("|")}`;
+        }).join("::");
+        return `${searchKey}||${filterKey}`;
+      }
+
+      function areSearchCandidatesReadyForCurrentState() {
+        const searchTextLower = getSearchTextLower();
+        if (!searchTextLower) return true;
+        const scopes = getEffectiveScopes();
+        const expectedCandidatesKey = getSearchCandidatesKey(
+          searchTextLower,
+          scopes,
+        );
+        return latestSearchCandidatesKey === expectedCandidatesKey;
+      }
+
+      function isFacetDataReadyForCurrentState() {
+        if (!ROWS.length) return false;
+        // Facets are ready only if the worker has returned them for the current search state
+        return (
+          areSearchCandidatesReadyForCurrentState() &&
+          latestFacetsKey === latestSearchCandidatesKey
+        );
+      }
+
+      function setFilterPopupControlsDisabled(disabled) {
+        if (filterSortToggle) filterSortToggle.disabled = disabled;
+        if (filterPopupSearch) filterPopupSearch.disabled = disabled;
+        const selectAllBtn = document.getElementById("filterSelectAll");
+        const selectNoneBtn = document.getElementById("filterSelectNone");
+        if (selectAllBtn) selectAllBtn.disabled = disabled;
+        if (selectNoneBtn) selectNoneBtn.disabled = disabled;
+      }
+
+      function computeAllFacetCountsForState() {
+        const stateKey = makeFacetCountsStateKey();
+
+        // Use pre-computed facets from worker
+        const rawFacets = facetCountsCache.byFacet;
+        const result = {};
+
+        FACET_KEYS.forEach((key) => {
+          const rawList = rawFacets[key] || [];
+          const countMap = new Map(rawList.map((i) => [i.value, i.count]));
+          const universe = facetValueUniverse[key] || [];
+
+          // Merge with universe to ensure 0-count items are still listed (for UI consistency)
+          result[key] = universe.map((value, idx) => ({
+            idx: idx + 1,
+            value,
+            count: countMap.get(value) || 0,
+          }));
+        });
+
+        return result;
+      }
+
+      function computeFacetCounts(facetKey) {
+        return computeAllFacetCountsForState()[facetKey] || [];
+      }
+
+      function sortPopupValues(values) {
+        const state = getCurrentSortState();
+        if (state.mode === "count" && state.dir === "desc") {
+          return values.sort(
+            (a, b) =>
+              b.count - a.count ||
+              a.value.localeCompare(b.value, undefined, {
+                numeric: true,
+                sensitivity: "base",
+              }) ||
+              a.idx - b.idx,
+          );
+        }
+        if (state.mode === "count" && state.dir === "asc") {
+          return values.sort(
+            (a, b) =>
+              a.count - b.count ||
+              a.value.localeCompare(b.value, undefined, {
+                numeric: true,
+                sensitivity: "base",
+              }) ||
+              a.idx - b.idx,
+          );
+        }
+        if (state.mode === "alpha" && state.dir === "asc") {
+          return values.sort(
+            (a, b) =>
+              a.value.localeCompare(b.value, undefined, {
+                numeric: true,
+                sensitivity: "base",
+              }) || a.idx - b.idx,
+          );
+        }
+        return values.sort(
+          (a, b) =>
+            b.value.localeCompare(a.value, undefined, {
+              numeric: true,
+              sensitivity: "base",
+            }) || a.idx - b.idx,
+        );
+      }
+
+      function updateSortToggle() {
+        if (!filterSortToggle) return;
+        const sortGlyph = filterSortToggle.querySelector(".sortGlyph");
+        const state = getCurrentSortState();
+        const idx = activeFilterType
+          ? (sortStateByFilter[activeFilterType] ?? 0)
+          : 0;
+        const isDefaultState = idx === 0;
+        if (sortGlyph) sortGlyph.textContent = state.glyph;
+        if (filterSortLabel) filterSortLabel.textContent = state.label;
+        filterSortToggle.classList.toggle("active", !isDefaultState);
+        filterSortToggle.setAttribute(
+          "aria-pressed",
+          !isDefaultState ? "true" : "false",
+        );
+        filterSortToggle.title = state.title;
+        filterSortToggle.setAttribute(
+          "aria-label",
+          state.ariaLabel || state.title,
+        );
+      }
+
+      function renderFilterPopup() {
+        if (!activeFilterType) return;
+        const t0 = performance.now();
+
+        filterPopupTitle.textContent = `Filter: ${filterLabels[activeFilterType] || activeFilterType}`;
+
+        if (!isFacetDataReadyForCurrentState() && !searchWorkerReady) {
+          setFilterPopupControlsDisabled(true);
+          filterPopupList.innerHTML = `<div class="muted">Loading filter values...</div>`;
+          if (filterPopupTotal) {
+            filterPopupTotal.innerHTML = `<div class="muted">Preparing counts...</div>`;
+          }
+          if (pendingFacetOpenAt !== null) {
+            pendingFacetOpenAt = null;
+          }
+          return;
+        }
+
+        // If worker is ready but facets aren't (race condition), wait for them
+        if (searchWorkerReady && !isFacetDataReadyForCurrentState()) {
+          filterPopupList.innerHTML = `<div class="muted">Updating filters...</div>`;
+          // The SEARCH_DONE message will trigger a re-render of the popup if open
+          return;
+        }
+
+        setFilterPopupControlsDisabled(false);
+        const values = computeFacetCounts(activeFilterType);
+        const displayableValues = values.filter(
+          (item) => item.count > 0 || tempSelectionSet.has(item.value),
+        );
+        const query = popupSearchQuery.trim().toLowerCase();
+        const filteredValues = query
+          ? displayableValues.filter((item) =>
+              item.value.toLowerCase().includes(query),
+            )
+          : displayableValues;
+
+        const selectedValues = filteredValues.filter((item) =>
+          tempSelectionSet.has(item.value),
+        );
+        const unselectedValues = filteredValues.filter(
+          (item) => !tempSelectionSet.has(item.value),
+        );
+        const sortedSelectedValues = sortPopupValues([...selectedValues]);
+        const sortedUnselectedValues = sortPopupValues([...unselectedValues]);
+        const allFacetValues = [
+          ...sortedSelectedValues,
+          ...sortedUnselectedValues,
+        ];
+
+        updatePopupHeaderCounts(filteredValues);
+
+        if (allFacetValues.length === 0) {
+          filterPopupList.innerHTML = `<div class="muted">No values found.</div>`;
+          if (pendingFacetOpenAt !== null) {
+            pendingFacetOpenAt = null;
+          }
+          return;
+        }
+
+        // Optimization: Use innerHTML string building instead of DOM nodes for speed
+        // Render all items as requested
+        const html = allFacetValues
+          .map((item) => {
+            const isActive = tempSelectionSet.has(item.value);
+            const isZeroSelected = isActive && item.count === 0;
+            const activeClass = isActive ? "active" : "";
+            const zeroClass = isZeroSelected ? "warningZeroMatch" : "";
+            const toggleText = isActive ? "✓" : "+";
+            const valueEscaped = escapeHtml(item.value);
+
+            return `
+            <div class="filterItem" data-value="${valueEscaped}">
+              <button class="filterItemToggle ${activeClass} ${zeroClass}" type="button" data-value="${valueEscaped}">
+                ${toggleText}
+              </button>
+              <div class="filterItemLabel">${valueEscaped}</div>
+              <div class="filterItemCount ${zeroClass}">${item.count}</div>
+            </div>
+          `;
+          })
+          .join("");
+
+        filterPopupList.innerHTML = html;
+
+        if (pendingFacetOpenAt !== null) {
+          pendingFacetOpenAt = null;
+        }
+      }
+
+      function updatePopupHeaderCounts(values) {
+        if (!filterPopupTotal) return;
+
+        let availableItems = values.length;
+        let totalMatches = 0;
+        let selectedMatches = 0;
+        let selectedItems = 0;
+
+        for (let i = 0; i < values.length; i++) {
+          const item = values[i];
+          const count = item.count || 0;
+          totalMatches += count;
+          if (tempSelectionSet.has(item.value)) {
+            selectedItems++;
+            selectedMatches += count;
+          }
+        }
+        const filterPercentRaw =
+          availableItems > 0
+            ? Math.min(100, (selectedItems / availableItems) * 100)
+            : 0;
+        const questionPercentRaw =
+          totalMatches > 0
+            ? Math.min(100, (selectedMatches / totalMatches) * 100)
+            : 0;
+        const filterPercent = filterPercentRaw.toFixed(2);
+        const questionPercent = questionPercentRaw.toFixed(2);
+        const facetLabel = filterPluralLabels[activeFilterType] || "Filters";
+
+        filterPopupTotal.innerHTML = `
+    <div class="filterPopupStats">
+      <div class="filterPopupStatCard" style="--pct:${filterPercentRaw}%">
+        <strong>${facetLabel}</strong>
+        <span class="filterPopupStatValue">${selectedItems}/${availableItems} (${filterPercent}%)</span>
+      </div>
+      <div class="filterPopupStatCard" style="--pct:${questionPercentRaw}%">
+        <strong>Questions</strong>
+        <span class="filterPopupStatValue">${selectedMatches}/${totalMatches} (${questionPercent}%)</span>
+      </div>
+    </div>
+  `;
+      }
+
+      if (filterPopupList) {
+        filterPopupList.addEventListener("click", (e) => {
+          const toggle = e.target.closest(".filterItemToggle");
+          if (!toggle) return;
+          const value = toggle.dataset.value || "";
+          if (!value) return;
+
+          filterPopupIsDirty = true;
+          if (tempSelectionSet.has(value)) {
+            tempSelectionSet.delete(value);
+          } else {
+            tempSelectionSet.add(value);
+          }
+
+          toggle.classList.toggle("active", tempSelectionSet.has(value));
+          toggle.textContent = tempSelectionSet.has(value) ? "✓" : "+";
+
+          requestAnimationFrame(() => renderFilterPopup());
+        });
+      }
+
+      function positionFilterPopup(anchorEl) {
+        const rect = anchorEl.getBoundingClientRect();
+        const popupRect = filterPopup.getBoundingClientRect();
+        const padding = 12;
+        let top = rect.bottom + 10;
+        let left = rect.left;
+
+        if (left + popupRect.width > window.innerWidth - padding) {
+          left = window.innerWidth - popupRect.width - padding;
+        }
+        if (left < padding) left = padding;
+        if (top + popupRect.height > window.innerHeight - padding) {
+          top = rect.top - popupRect.height - 10;
+        }
+        if (top < padding) top = padding;
+
+        filterPopup.style.top = `${top}px`;
+        filterPopup.style.left = `${left}px`;
+      }
+
+      function openFilterPopup(filterType, anchorEl) {
+        lastFocusedFilterTrigger = anchorEl;
+        pendingFacetOpenAt = performance.now();
+        activeFilterType = filterType;
+        tempSelectionSet = new Set(currentFilters[filterType]);
+        popupSearchQuery = "";
+        filterPopupIsDirty = false; // Reset dirty flag
+        if (sortStateByFilter[filterType] === undefined) {
+          sortStateByFilter[filterType] = 0;
+        }
+        updateSortToggle();
+        filterPopupSearch.value = "";
+        filterOverlay.classList.add("show");
+        filterPopup.classList.add("show");
+        filterPopup.setAttribute("aria-hidden", "false");
+        renderFilterPopup();
+        positionFilterPopup(anchorEl);
+        filterPopupSearch.focus();
+        anchorEl.setAttribute("aria-expanded", "true");
+      }
+
+      function closeFilterPopup({ applyChanges }) {
+        const type = activeFilterType;
+        const selection = new Set(tempSelectionSet);
+
+        // --- Immediate UI Update ---
+        activeFilterType = null;
+        tempSelectionSet = new Set();
+        popupSearchQuery = "";
+        filterPopup.classList.remove("show");
+        filterOverlay.classList.remove("show");
+        filterPopup.setAttribute("aria-hidden", "true");
+        if (lastFocusedFilterTrigger) {
+          lastFocusedFilterTrigger.setAttribute("aria-expanded", "false");
+          lastFocusedFilterTrigger.focus();
+          lastFocusedFilterTrigger = null;
+        }
+        // --- End Immediate UI Update ---
+
+        // --- Deferred Heavy Work ---
+        if (applyChanges && type && filterPopupIsDirty) {
+          // Defer the expensive check and update to unblock the UI
+          setTimeout(() => {
+            const current = [...currentFilters[type]].sort();
+            const newSelection = [...selection].sort();
+            const hasChanges =
+              current.length !== newSelection.length ||
+              current.some((value, index) => value !== newSelection[index]);
+
+            if (hasChanges) {
+              currentFilters[type] = [...selection];
+              rebuildFilterSets();
+              invalidateSearchCache("filters-changed");
+              scheduleFilteredUpdate();
+            }
+          }, 0);
+        }
+      }
+
+      function updateFilterButtons() {
+        const allFacetCounts = computeAllFacetCountsForState();
+        const countMapByFacet = {
+          exam: new Map(
+            (allFacetCounts.exam || []).map((item) => [
+              item.value,
+              item.count || 0,
+            ]),
+          ),
+          year: new Map(
+            (allFacetCounts.year || []).map((item) => [
+              item.value,
+              item.count || 0,
+            ]),
+          ),
+          subject: new Map(
+            (allFacetCounts.subject || []).map((item) => [
+              item.value,
+              item.count || 0,
+            ]),
+          ),
+          theme: new Map(
+            (allFacetCounts.theme || []).map((item) => [
+              item.value,
+              item.count || 0,
+            ]),
+          ),
+          topic: new Map(
+            (allFacetCounts.topic || []).map((item) => [
+              item.value,
+              item.count || 0,
+            ]),
+          ),
+        };
+
+        document.querySelectorAll(".filterButton").forEach((btn) => {
+          const type = btn.dataset.filter;
+          const selectedValues = currentFilters[type] || [];
+          const count = selectedValues.length;
+          const countEl = btn.querySelector(`[data-count="${type}"]`);
+          if (countEl) countEl.textContent = count.toString();
+          btn.classList.toggle("hasSelection", count > 0);
+
+          const countMap = countMapByFacet[type] || new Map();
+          const hasZeroMatchSelection =
+            count > 0 &&
+            selectedValues.some((value) => (countMap.get(value) || 0) === 0);
+          btn.classList.toggle("hasZeroMatchSelection", hasZeroMatchSelection);
+          btn.setAttribute("aria-haspopup", "true");
+          btn.setAttribute("aria-expanded", "false");
+        });
+      }
+
+      // ============================================================================
+      // EVENT HANDLERS
+      // ============================================================================
+
+      // Filter buttons
+      document.querySelectorAll(".filterButton").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (
+            activeFilterType === btn.dataset.filter &&
+            filterPopup.classList.contains("show")
+          ) {
+            closeFilterPopup({ applyChanges: false });
+            return;
+          }
+          openFilterPopup(btn.dataset.filter, btn);
+        });
+      });
+
+      // Filter popup actions
+      document
+        .getElementById("filterSelectAll")
+        .addEventListener("click", () => {
+          filterPopupIsDirty = true;
+          if (!activeFilterType || !isFacetDataReadyForCurrentState()) return;
+          const values = computeFacetCounts(activeFilterType);
+          const query = popupSearchQuery.trim().toLowerCase();
+          const visiblePositiveValues = values.filter(
+            (item) =>
+              item.count > 0 &&
+              (!query || item.value.toLowerCase().includes(query)),
+          );
+          tempSelectionSet = new Set(
+            visiblePositiveValues.map((item) => item.value),
+          );
+          renderFilterPopup();
+        });
+
+      document
+        .getElementById("filterSelectNone")
+        .addEventListener("click", () => {
+          filterPopupIsDirty = true;
+          if (!isFacetDataReadyForCurrentState()) return;
+          tempSelectionSet = new Set();
+          renderFilterPopup();
+        });
+
+      document.getElementById("filterApply").addEventListener("click", () => {
+        closeFilterPopup({ applyChanges: true });
+      });
+
+      document.getElementById("filterCancel").addEventListener("click", () => {
+        closeFilterPopup({ applyChanges: false });
+      });
+
+      filterOverlay.addEventListener("click", () => {
+        closeFilterPopup({ applyChanges: true });
+      });
+
+      if (filterSortToggle) {
+        filterSortToggle.addEventListener("click", () => {
+          if (!activeFilterType) return;
+          const currentIndex = sortStateByFilter[activeFilterType] ?? 0;
+          sortStateByFilter[activeFilterType] = nextSortState(
+            currentIndex,
+            activeFilterType,
+          );
+          updateSortToggle();
+          renderFilterPopup();
+        });
+      }
+
+      filterPopupSearch.addEventListener(
+        "input",
+        debounce((e) => {
+          popupSearchQuery = e.target.value || "";
+          renderFilterPopup();
+        }, 200),
+      );
+
+      const searchScopePopup = document.getElementById("searchScopePopup");
+      const searchScopeToggle = document.getElementById("searchScopeToggle");
+      const searchHighlightToggle = document.getElementById(
+        "searchHighlightToggle",
+      );
+      const scopeItems = document.querySelectorAll("[data-search-scope]");
+      const scopeToggleEls = {
+        scopeQuestion: document.getElementById("scopeQuestionToggle"),
+        scopeOptions: document.getElementById("scopeOptionsToggle"),
+        scopeExplanation: document.getElementById("scopeExplanationToggle"),
+      };
+
+      function updateSearchScopeUI() {
+        Object.keys(scopeToggleEls).forEach((key) => {
+          const el = scopeToggleEls[key];
+          if (!el) return;
+          const active = !!searchSettings[key];
+          el.classList.toggle("active", active);
+          el.textContent = active ? "✓" : "+";
+        });
+        if (searchHighlightToggle) {
+          searchHighlightToggle.classList.toggle(
+            "active",
+            !!searchSettings.highlight,
+          );
+          searchHighlightToggle.setAttribute(
+            "aria-pressed",
+            String(!!searchSettings.highlight),
+          );
+        }
+      }
+
+      function openSearchScopePopup() {
+        if (!searchScopePopup) return;
+        searchScopePopup.classList.add("show");
+        searchScopePopup.setAttribute("aria-hidden", "false");
+        if (searchScopeToggle)
+          searchScopeToggle.setAttribute("aria-expanded", "true");
+      }
+
+      function closeSearchScopePopup() {
+        if (!searchScopePopup) return;
+        searchScopePopup.classList.remove("show");
+        searchScopePopup.setAttribute("aria-hidden", "true");
+        if (searchScopeToggle)
+          searchScopeToggle.setAttribute("aria-expanded", "false");
+      }
+
+      loadSearchSettings();
+      updateSearchScopeUI();
+
+      if (searchScopeToggle) {
+        searchScopeToggle.addEventListener("click", () => {
+          if (searchScopePopup.classList.contains("show"))
+            closeSearchScopePopup();
+          else openSearchScopePopup();
+        });
+      }
+
+      function refreshVisibleHighlights() {
+        const searchTextLower = getSearchTextLower();
+        document.querySelectorAll("#app [data-qtext]").forEach((el) => {
+          renderSearchText(el, el.dataset.searchRaw || "", searchTextLower);
+        });
+        document.querySelectorAll("#app .card").forEach((card) => {
+          if (card.dataset.deferredHighlightDone === "1") {
+            card.dataset.deferredHighlightDone = "";
+            applyDeferredCardHighlights(card, searchTextLower);
+          }
+        });
+      }
+
+      if (searchHighlightToggle) {
+        searchHighlightToggle.addEventListener("click", () => {
+          searchSettings.highlight = !searchSettings.highlight;
+          saveSearchSettings();
+          updateSearchScopeUI();
+          refreshVisibleHighlights();
+        });
+      }
+
+      scopeItems.forEach((el) => {
+        el.addEventListener("click", () => {
+          const key = el.getAttribute("data-search-scope");
+          if (!key || !(key in searchSettings)) return;
+          searchSettings[key] = !searchSettings[key];
+          saveSearchSettings();
+          updateSearchScopeUI();
+          invalidateSearchCache("scope-changed");
+          scheduleFilteredUpdate();
+        });
+      });
+
+      document.getElementById("scopeAll")?.addEventListener("click", () => {
+        searchSettings.scopeQuestion = true;
+        searchSettings.scopeOptions = true;
+        searchSettings.scopeExplanation = true;
+        saveSearchSettings();
+        updateSearchScopeUI();
+        invalidateSearchCache("scope-changed");
+        scheduleFilteredUpdate();
+      });
+
+      document.getElementById("scopeNone")?.addEventListener("click", () => {
+        searchSettings.scopeQuestion = false;
+        searchSettings.scopeOptions = false;
+        searchSettings.scopeExplanation = false;
+        saveSearchSettings();
+        updateSearchScopeUI();
+        invalidateSearchCache("scope-changed");
+        scheduleFilteredUpdate();
+      });
+
+      document
+        .getElementById("scopeClose")
+        ?.addEventListener("click", closeSearchScopePopup);
+
+      // Search input
+      document.getElementById("clientSearch").addEventListener(
+        "input",
+        debounce(() => {
+          pendingSearchInputAt = performance.now();
+          scheduleFilteredUpdate();
+        }, 100),
+      );
+
+      // Search clear button
+      document.getElementById("searchClear").addEventListener("click", () => {
+        const input = document.getElementById("clientSearch");
+        input.value = "";
+        input.focus();
+        input.dispatchEvent(new Event("input"));
+      });
+
+      // Clear progress
+      document.getElementById("clearProgress").addEventListener("click", () => {
+        if (
+          confirm(
+            "Clear ALL saved attempts and eliminations? This cannot be undone.",
+          )
+        ) {
+          stateManager.clear();
+          scheduleFilteredUpdate();
+        }
+      });
+
+      // ============================================================================
+      // SIDEBAR TOGGLE (VS CODE STYLE)
+      // ============================================================================
+      // ============================================================================
+      // VS CODE-STYLE SIDEBAR SYSTEM
+      // ============================================================================
+      function initSidebarSystem() {
+        const appContainer = document.querySelector(".app-container");
+        const sidebarWrapper = document.getElementById("sidebarWrapper");
+        const mainContent = document.getElementById("mainContent");
+        const resizeHandle = document.getElementById("sidebarResizeHandle");
+        const activityBar = document.querySelector(".activity-bar");
+        const sidebarTitle = document.getElementById("sidebarTitle");
+
+        const DEFAULT_SIDEBAR_WIDTH = 280;
+        const MIN_SIDEBAR_WIDTH = 200;
+        const MAX_SIDEBAR_WIDTH = 600;
+        const sidebarWidthKey = "mcq-sidebar-width";
+
+        // Load sidebar width preference
+        function loadSidebarWidth() {
+          const saved = localStorage.getItem(sidebarWidthKey);
+          return saved ? parseInt(saved, 10) : DEFAULT_SIDEBAR_WIDTH;
+        }
+
+        // Set sidebar width
+        function setSidebarWidth(width) {
+          const clamped = Math.max(
+            MIN_SIDEBAR_WIDTH,
+            Math.min(width, MAX_SIDEBAR_WIDTH),
+          );
+          appContainer.style.setProperty("--sidebar-width", `${clamped}px`);
+          localStorage.setItem(sidebarWidthKey, String(clamped));
+        }
+
+        // Initialize sidebar width
+        setSidebarWidth(loadSidebarWidth());
+
+        // Panel management
+        function switchPanel(panelName, forceClose = false) {
+          console.log("[switchPanel] Called with panelName:", panelName);
+
+          const panels = document.querySelectorAll(".sidebar-panel");
+          const buttons = document.querySelectorAll(".activity-bar-item");
+          console.log(
+            "[switchPanel] Found",
+            panels.length,
+            "panels and",
+            buttons.length,
+            "buttons",
+          );
+
+          const isCurrentPanel =
+            sidebarWrapper.classList.contains("collapsed") === false &&
+            document.querySelector(
+              `.sidebar-panel[data-panel="${panelName}"].active`,
+            ) !== null;
+
+          // If clicking same button twice, collapse sidebar
+          if (isCurrentPanel && forceClose !== false) {
+            sidebarWrapper.classList.add("collapsed");
+            localStorage.setItem("mcq-sidebar-collapsed", "true");
+            return;
+          }
+
+          // Expand sidebar and switch panel
+          sidebarWrapper.classList.remove("collapsed");
+          localStorage.setItem("mcq-sidebar-collapsed", "false");
+
+          panels.forEach((p) => p.classList.remove("active"));
+          buttons.forEach((b) => b.classList.remove("active"));
+
+          const activePanel = document.querySelector(
+            `.sidebar-panel[data-panel="${panelName}"]`,
+          );
+
+          console.log("[switchPanel] activePanel found:", !!activePanel);
+
+          if (activePanel) {
+            activePanel.classList.add("active");
+            console.log(
+              "[switchPanel] Added .active class to panel, now has:",
+              activePanel.className,
+            );
+          } else {
+            console.warn(
+              "[switchPanel] Could not find panel with data-panel=" + panelName,
+            );
+          }
+
+          const btn = activityBar.querySelector(`[data-panel="${panelName}"]`);
+          if (btn) {
+            btn.classList.add("active");
+            console.log("[switchPanel] Added .active class to button");
+            // Update sidebar header title based on button data-panel
+            const titleMap = {
+              stats: "Statistics",
+              topics: "Popular Topics",
+              bookmarks: "Saved Questions",
+              progress: "Study Progress",
+            };
+            sidebarTitle.textContent = titleMap[panelName] || "Panel";
+          }
+
+          localStorage.setItem("mcq-active-panel", panelName);
+        }
+
+        // Activity bar button click handlers
+        activityBar.addEventListener("click", (e) => {
+          const btn = e.target.closest(".activity-bar-item");
+          if (!btn) return;
+
+          const panelName = btn.dataset.panel;
+          const isCollapsed = sidebarWrapper.classList.contains("collapsed");
+          const isCurrentPanel =
+            document.querySelector(
+              `.sidebar-panel[data-panel="${panelName}"].active`,
+            ) !== null;
+
+          // Toggle collapse if same button clicked, otherwise switch panel
+          if (!isCollapsed && isCurrentPanel) {
+            sidebarWrapper.classList.add("collapsed");
+            localStorage.setItem("mcq-sidebar-collapsed", "true");
+          } else {
+            switchPanel(panelName);
+          }
+        });
+
+        // Restore last active panel or default to stats
+        let lastPanel = localStorage.getItem("mcq-active-panel");
+        let wasPreviouslyCollapsed =
+          localStorage.getItem("mcq-sidebar-collapsed") === "true";
+
+        // On first load, default to stats panel and expanded sidebar
+        if (!lastPanel) {
+          lastPanel = "stats";
+          localStorage.setItem("mcq-active-panel", "stats");
+          localStorage.setItem("mcq-sidebar-collapsed", "false");
+          wasPreviouslyCollapsed = false;
+        }
+
+        console.log(
+          "[initSidebarSystem] Restoring lastPanel:",
+          lastPanel,
+          "wasPreviouslyCollapsed:",
+          wasPreviouslyCollapsed,
+        );
+        switchPanel(lastPanel);
+        if (wasPreviouslyCollapsed) {
+          sidebarWrapper.classList.add("collapsed");
+        } else {
+          // Explicitly ensure sidebar is not collapsed on first load
+          sidebarWrapper.classList.remove("collapsed");
+        }
+
+        // Safety fallback: Ensure at least one panel is active
+        setTimeout(() => {
+          const activePanels = document.querySelectorAll(
+            ".sidebar-panel.active",
+          );
+          console.log(
+            "[initSidebarSystem] After switchPanel: activePanels:",
+            activePanels.length,
+          );
+
+          if (activePanels.length === 0) {
+            console.warn(
+              "[initSidebarSystem] No active panels found! Forcing stats panel to be active.",
+            );
+            const statsPanel = document.querySelector('[data-panel="stats"]');
+            if (statsPanel) {
+              statsPanel.classList.add("active");
+              console.log("[initSidebarSystem] Forced stats panel to active");
+            }
+          }
+        }, 100);
+
+        // Sidebar resizing with smooth drag
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        resizeHandle.addEventListener("mousedown", (e) => {
+          isResizing = true;
+          startX = e.clientX;
+          startWidth = parseInt(
+            getComputedStyle(appContainer).getPropertyValue("--sidebar-width"),
+          );
+          resizeHandle.classList.add("resizing");
+          document.body.style.userSelect = "none";
+          document.body.style.cursor = "col-resize";
+        });
+
+        document.addEventListener("mousemove", (e) => {
+          if (!isResizing) return;
+
+          const delta = e.clientX - startX;
+          const newWidth = startWidth + delta;
+          setSidebarWidth(newWidth);
+        });
+
+        document.addEventListener("mouseup", () => {
+          if (isResizing) {
+            isResizing = false;
+            resizeHandle.classList.remove("resizing");
+            document.body.style.userSelect = "";
+            document.body.style.cursor = "";
+          }
+        });
+
+        // Optional: Collapse sidebar if width becomes very small
+        // This can help on smaller screens
+      }
+
+      initSidebarSystem();
+
+      // FAB buttons
+      const scrollToTopBtn = document.getElementById("scrollToTop");
+      scrollToTopBtn.addEventListener("click", () => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+
+      window.addEventListener(
+        "scroll",
+        throttle(() => {
+          const shouldShow = window.scrollY > 300;
+          scrollToTopBtn.classList.toggle("hidden", !shouldShow);
+        }, 100),
+      );
+
+      // Shortcuts
+      const shortcutsPanel = document.getElementById("shortcuts");
+      document.getElementById("showShortcuts").addEventListener("click", () => {
+        shortcutsPanel.classList.toggle("show");
+      });
+
+      document.addEventListener("click", (e) => {
+        if (
+          !e.target.closest("#shortcuts") &&
+          !e.target.closest("#showShortcuts")
+        ) {
+          shortcutsPanel.classList.remove("show");
+        }
+        if (
+          !e.target.closest("#searchScopePopup") &&
+          !e.target.closest("#searchScopeToggle")
+        ) {
+          closeSearchScopePopup();
+        }
+      });
+
+      // Keyboard shortcuts
+      document.addEventListener("keydown", (e) => {
+        if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") {
+          if (e.key === "Escape") {
+            e.target.blur();
+            if (filterPopup.classList.contains("show")) {
+              closeFilterPopup({ applyChanges: false });
+            } else if (searchScopePopup.classList.contains("show")) {
+              closeSearchScopePopup();
+            } else {
+              document.getElementById("clientSearch").value = "";
+              scheduleFilteredUpdate();
+            }
+          }
+          return;
+        }
+
+        switch (e.key.toLowerCase()) {
+          case "/":
+            e.preventDefault();
+            document.getElementById("clientSearch").focus();
+            break;
+          case "f":
+            if (activeFilterType && filterPopup.classList.contains("show")) {
+              closeFilterPopup({ applyChanges: false });
+            } else {
+              const firstBtn = document.querySelector(".filterButton");
+              if (firstBtn) openFilterPopup(firstBtn.dataset.filter, firstBtn);
+            }
+            break;
+          case "?":
+            shortcutsPanel.classList.toggle("show");
+            break;
+        }
+      });
+
+      // ============================================================================
+      // DATA NORMALIZATION
+      // ============================================================================
+      function normalizeRecord(record) {
+        const toText = (value) => {
+          if (value === null || value === undefined) return "";
+          return String(value).trim();
+        };
+        return {
+          question_id: toText(record.question_id),
+          exam_robot_question_id: toText(record.exam_robot_question_id),
+          exam_robot_question_number: toText(record.exam_robot_question_number),
+          exam_robot_exam: toText(record.exam_robot_exam),
+          exam_robot_year: toText(record.exam_robot_year),
+          exam_robot_subject: toText(record.exam_robot_subject),
+          exam_robot_theme: toText(record.exam_robot_theme),
+          exam_robot_topic: toText(record.exam_robot_topic),
+          exam_robot_answer_status: toText(record.exam_robot_answer_status),
+          exam_robot_question: toText(record.exam_robot_question),
+          exam_robot_option_a: toText(record.exam_robot_option_a),
+          exam_robot_option_b: toText(record.exam_robot_option_b),
+          exam_robot_option_c: toText(record.exam_robot_option_c),
+          exam_robot_option_d: toText(record.exam_robot_option_d),
+          exam_robot_correct_option: toText(record.exam_robot_correct_option),
+          exam_robot_explanation: toText(record.exam_robot_explanation),
+          exam_robot_answer_sources: toText(record.exam_robot_answer_sources),
+          exam_robot_question_link: toText(record.exam_robot_question_link),
+          exam_robot_verdict: toText(record.exam_robot_verdict),
+          exam_robot_how_to_study: toText(record.exam_robot_how_to_study),
+          exam_robot_vault: toText(record.exam_robot_vault),
+        };
+      }
+
+      // ============================================================================
+      // GRIST INTEGRATION
+      // ============================================================================
+      grist.ready({
+        requiredAccess: "read table",
+        columns: [
+          "question_id",
+          "exam_robot_question_id",
+          "exam_robot_question_number",
+          "exam_robot_exam",
+          "exam_robot_year",
+          "exam_robot_subject",
+          "exam_robot_theme",
+          "exam_robot_topic",
+          "exam_robot_answer_status",
+          "exam_robot_question",
+          "exam_robot_option_a",
+          "exam_robot_option_b",
+          "exam_robot_option_c",
+          "exam_robot_option_d",
+          "exam_robot_correct_option",
+          "exam_robot_explanation",
+          "exam_robot_answer_sources",
+          "exam_robot_question_link",
+          "exam_robot_verdict",
+          "exam_robot_how_to_study",
+          "exam_robot_vault",
+        ],
+      });
+
+      grist.onRecords((records) => {
+        console.log(
+          "[grist.onRecords] Called with",
+          records ? records.length : 0,
+          "records",
+        );
+        const t0 = performance.now();
+        DATA = (records || []).map(normalizeRecord);
+        console.log("[grist.onRecords] DATA.length:", DATA.length);
+        ROWS = buildSearchRows(DATA);
+        console.log("[grist.onRecords] ROWS.length:", ROWS.length);
+        ALL_ROW_INDICES = ROWS.map((_, idx) => idx);
+        buildFacetValueUniverse();
+
+        // Clear facet cache
+        facetCountsCache.key = "";
+        facetCountsCache.byFacet = {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        };
+
+        rebuildFilterSets();
+        updateFilterButtons();
+        console.log("[grist.onRecords] About to call updateSidebarPanels");
+        updateSidebarPanels();
+        invalidateSearchCache("records-updated");
+        initSearchWorker(ROWS);
+        latestSearchCandidateIndices = ALL_ROW_INDICES;
+        latestSearchCandidatesKey = null;
+        latestFacetsKey = null;
+        latestFilteredRecords = ROWS.map((row) => row.record);
+        scheduleFilteredUpdate();
+      });
+
+      // Fallback initialization if not in Grist
+      window.addEventListener("load", () => {
+        setTimeout(() => {
+          console.log(
+            "[window.load] Fallback init check - DATA.length:",
+            DATA ? DATA.length : "DATA undefined",
+          );
+          // Check if data loaded
+          if (!DATA || DATA.length === 0) {
+            console.log("No data from Grist, initializing with empty state");
+            DATA = [];
+            ROWS = [];
+            ALL_ROW_INDICES = [];
+            buildFacetValueUniverse();
+            rebuildFilterSets();
+            updateFilterButtons();
+            updateHeaderStats([], 0);
+            updateSidebarPanels();
+          }
+        }, 1000);
+      });
+    </script>
+  </body>
+</html>
