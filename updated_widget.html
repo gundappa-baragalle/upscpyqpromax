@@ -2808,11 +2808,14 @@
         
         let rows = [];
         let indexes = { question: new Map(), options: new Map(), explanation: new Map() };
-        // Parallel arrays to indexes to store Term Frequencies (TF) for BM25
+        // Parallel arrays to indexes to store Term Frequencies (TF) for BM25 / TF-IDF
         let termFreqs = { question: new Map(), options: new Map(), explanation: new Map() };
         let docFrequency = { question: new Map(), options: new Map(), explanation: new Map() };
         let docLengths = { question: [], options: [], explanation: [] };
         let avgFieldLength = { question: 0, options: 0, explanation: 0 };
+        // Auxiliary indexes for prefix, phonetic and fuzzy matching.
+        let prefixIndex = { question: new Map(), options: new Map(), explanation: new Map() };
+        let phoneticIndex = { question: new Map(), options: new Map(), explanation: new Map() };
         
         // BM25 Constants & Field Weights
         const k1 = 1.2;
@@ -2830,6 +2833,66 @@
           w = w.replace(/(?:ing|ed)$/, '');
           stemCache.set(word, w);
           return w;
+        }
+
+        function soundex(word) {
+          const cleaned = String(word || "").toUpperCase().replace(/[^A-Z]/g, "");
+          if (!cleaned) return "";
+          const first = cleaned[0];
+          const map = {
+            B: "1", F: "1", P: "1", V: "1",
+            C: "2", G: "2", J: "2", K: "2", Q: "2", S: "2", X: "2", Z: "2",
+            D: "3", T: "3",
+            L: "4",
+            M: "5", N: "5",
+            R: "6",
+          };
+          let out = first;
+          let prev = map[first] || "";
+          for (let i = 1; i < cleaned.length && out.length < 4; i++) {
+            const code = map[cleaned[i]] || "";
+            if (!code || code === prev) {
+              prev = code;
+              continue;
+            }
+            out += code;
+            prev = code;
+          }
+          return (out + "000").slice(0, 4);
+        }
+
+        function boundedLevenshtein(a, b, maxDistance = 2) {
+          if (a === b) return 0;
+          if (!a || !b) return Math.max(a.length, b.length);
+          if (Math.abs(a.length - b.length) > maxDistance) return maxDistance + 1;
+
+          const prev = new Uint16Array(b.length + 1);
+          const curr = new Uint16Array(b.length + 1);
+          for (let j = 0; j <= b.length; j++) prev[j] = j;
+
+          for (let i = 1; i <= a.length; i++) {
+            curr[0] = i;
+            let minInRow = curr[0];
+            for (let j = 1; j <= b.length; j++) {
+              const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+              const del = prev[j] + 1;
+              const ins = curr[j - 1] + 1;
+              const sub = prev[j - 1] + cost;
+              const val = Math.min(del, ins, sub);
+              curr[j] = val;
+              if (val < minInRow) minInRow = val;
+            }
+            if (minInRow > maxDistance) return maxDistance + 1;
+            prev.set(curr);
+          }
+
+          return prev[b.length];
+        }
+
+        function registerAlias(indexMap, key, token) {
+          if (!key || !token) return;
+          if (!indexMap.has(key)) indexMap.set(key, new Set());
+          indexMap.get(key).add(token);
         }
 
         // Advanced tokenization with frequency counting
@@ -2873,6 +2936,8 @@
              indexes[scope] = new Map();
              termFreqs[scope] = new Map();
              docFrequency[scope] = new Map();
+             prefixIndex[scope] = new Map();
+             phoneticIndex[scope] = new Map();
              docLengths[scope] = new Uint16Array(rows.length);
              avgFieldLength[scope] = 0;
           });
@@ -2911,6 +2976,19 @@
                 indexes[scope].get(token).push(i);
                 termFreqs[scope].get(token).push(freq);
                 docFrequency[scope].set(token, docFrequency[scope].get(token) + 1);
+
+                if (token.length >= 2) {
+                  registerAlias(prefixIndex[scope], token.slice(0, 2), token);
+                }
+                if (token.length >= 3) {
+                  registerAlias(prefixIndex[scope], token.slice(0, 3), token);
+                }
+                if (token.length >= 4) {
+                  registerAlias(prefixIndex[scope], token.slice(0, 4), token);
+                }
+
+                const phoneticKey = soundex(token);
+                if (phoneticKey) registerAlias(phoneticIndex[scope], phoneticKey, token);
               }
             }
           }
@@ -3060,10 +3138,75 @@
           return result;
         }
 
-        // Build search candidates with query optimization
+        function expandQueryToken(token, activeScopes) {
+          const base = String(token || "").toLowerCase();
+          const expanded = new Set();
+          if (!base) return expanded;
+
+          const stemmed = stem(base);
+          expanded.add(base);
+          expanded.add(stemmed);
+
+          const prefixes = new Set();
+          if (base.length >= 2) prefixes.add(base.slice(0, 2));
+          if (base.length >= 3) prefixes.add(base.slice(0, 3));
+          if (base.length >= 4) prefixes.add(base.slice(0, 4));
+
+          for (const scope of activeScopes) {
+            if (indexes[scope].has(base)) expanded.add(base);
+            if (indexes[scope].has(stemmed)) expanded.add(stemmed);
+
+            // Prefix search support.
+            for (const p of prefixes) {
+              const prefTerms = prefixIndex[scope].get(p);
+              if (!prefTerms) continue;
+              let added = 0;
+              for (const t of prefTerms) {
+                if (t.startsWith(base) || t.startsWith(stemmed)) {
+                  expanded.add(t);
+                  added++;
+                  if (added >= 24) break;
+                }
+              }
+            }
+
+            // Phonetic matching (Soundex).
+            const phoneticKey = soundex(base);
+            if (phoneticKey) {
+              const phoneticTerms = phoneticIndex[scope].get(phoneticKey);
+              if (phoneticTerms) {
+                let added = 0;
+                for (const t of phoneticTerms) {
+                  expanded.add(t);
+                  added++;
+                  if (added >= 20) break;
+                }
+              }
+            }
+
+            // Fuzzy / typo tolerance from nearest prefix neighborhood.
+            const fuzzyPool = prefixIndex[scope].get(base.slice(0, Math.min(3, base.length))) || new Set();
+            if (fuzzyPool.size) {
+              const maxDistance = base.length <= 4 ? 1 : 2;
+              let added = 0;
+              for (const candidateTerm of fuzzyPool) {
+                if (Math.abs(candidateTerm.length - base.length) > maxDistance) continue;
+                if (boundedLevenshtein(base, candidateTerm, maxDistance) <= maxDistance) {
+                  expanded.add(candidateTerm);
+                  added++;
+                  if (added >= 20) break;
+                }
+              }
+            }
+          }
+
+          return expanded;
+        }
+
+        // Build search candidates with query optimization.
         function buildSearchCandidates(tokens, scopes) {
           if (!tokens.length) return rows.map((_, idx) => idx);
-          
+
           const activeScopes = [];
           if (scopes.scopeQuestion) activeScopes.push("question");
           if (scopes.scopeOptions) activeScopes.push("options");
@@ -3071,48 +3214,43 @@
           if (!activeScopes.length) activeScopes.push("question", "options", "explanation");
 
           let candidates = null;
-          
-          // Sort tokens by document frequency (process rare terms first for faster elimination)
-          const tokenStats = tokens.map(token => {
+
+          // Sort tokens by document frequency (rare terms first).
+          const tokenStats = tokens.map((token) => {
+            const terms = expandQueryToken(token, activeScopes);
             let freq = 0;
-            for (const scope of activeScopes) {
-              freq += docFrequency[scope].get(token) || 0;
+            for (const term of terms) {
+              for (const scope of activeScopes) {
+                freq += docFrequency[scope].get(term) || 0;
+              }
             }
-            return { token, freq };
+            return { token, terms, freq };
           });
           tokenStats.sort((a, b) => a.freq - b.freq);
 
-          for (const {token} of tokenStats) {
+          for (const { terms } of tokenStats) {
             const postings = [];
-            
-            // Collect postings from all active scopes
-            for (const scope of activeScopes) {
-              const list = indexes[scope].get(token);
-              if (list && list.length) postings.push(list);
+            for (const term of terms) {
+              for (const scope of activeScopes) {
+                const list = indexes[scope].get(term);
+                if (list && list.length) postings.push(list);
+              }
             }
-            
-            if (!postings.length) return []; // No documents match this token
-            
-            // Union postings from different scopes (OR operation)
-            let tokenUnion;
-            if (postings.length === 1) {
-              tokenUnion = postings[0];
-            } else {
-              postings.sort((a, b) => a.length - b.length);
-              tokenUnion = mergeSortedUnique(postings);
-            }
-            
+
+            if (!postings.length) return [];
+
+            postings.sort((a, b) => a.length - b.length);
+            const tokenUnion = mergeSortedUnique(postings);
             if (!tokenUnion.length) return [];
-            
-            // Intersect with existing candidates (AND operation)
+
             if (candidates === null) {
               candidates = tokenUnion;
             } else {
               candidates = intersectSortedGalloping(candidates, tokenUnion);
-              if (!candidates.length) return []; // Early termination
+              if (!candidates.length) return [];
             }
           }
-          
+
           return candidates || [];
         }
 
@@ -3189,28 +3327,29 @@
              for (let i = 0; i < candidates.length; i++) isCandidate[candidates[i]] = 1;
              
              for (const token of tokens) {
-                // Match both exact and stemmed forms
-                const searchTerms = [token, stem(token)];
-                
+                const searchTerms = expandQueryToken(token, activeScopes);
                 for (const term of searchTerms) {
                     for (const scope of activeScopes) {
                         const postings = indexes[scope].get(term);
                         if (!postings) continue;
-                        
+
                         const freqs = termFreqs[scope].get(term);
                         const N = rows.length;
-                        const n = docFrequency[scope].get(term);
-                        const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
+                        const n = docFrequency[scope].get(term) || 1;
+                        const bm25Idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
+                        const tfidfIdf = Math.log(1 + N / n);
                         const avgDl = avgFieldLength[scope] || 1;
                         const weight = FIELD_WEIGHTS[scope];
-                        
+
                         for (let k = 0; k < postings.length; k++) {
                             const docIdx = postings[k];
                             if (isCandidate[docIdx]) {
                                 const tf = freqs[k];
-                                const dl = docLengths[scope][docIdx];
-                                const score = idf * ( (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgDl))) );
-                                scores[docIdx] += score * weight;
+                                const dl = docLengths[scope][docIdx] || 1;
+                                const bm25 = bm25Idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgDl))));
+                                const tfidf = (1 + Math.log(tf)) * tfidfIdf;
+                                // Hybrid score: BM25 (primary) + TF-IDF (secondary stability/recall signal)
+                                scores[docIdx] += weight * (bm25 * 0.8 + tfidf * 0.2);
                             }
                         }
                     }
