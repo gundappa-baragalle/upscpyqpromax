@@ -3681,35 +3681,196 @@
         return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       }
 
-      let highlightCacheQuery = "";
-      let highlightCacheRegex = null;
+      const highlightLexicon = {
+        question: new Set(),
+        options: new Set(),
+        explanation: new Set(),
+      };
+      let highlightRegexCacheKey = "";
+      let highlightRegexCacheByScope = {
+        question: null,
+        options: null,
+        explanation: null,
+      };
 
-      function getHighlightRegex(searchTextLower) {
-        if (highlightCacheRegex && highlightCacheQuery === searchTextLower) {
-          return highlightCacheRegex;
+      function stemForHighlight(word) {
+        let w = String(word || "").toLowerCase();
+        w = w.replace(/(?:ies|es|s)$/, "");
+        w = w.replace(/(?:ing|ed)$/, "");
+        return w;
+      }
+
+      function soundexForHighlight(word) {
+        const cleaned = String(word || "").toUpperCase().replace(/[^A-Z]/g, "");
+        if (!cleaned) return "";
+        const first = cleaned[0];
+        const map = {
+          B: "1", F: "1", P: "1", V: "1",
+          C: "2", G: "2", J: "2", K: "2", Q: "2", S: "2", X: "2", Z: "2",
+          D: "3", T: "3",
+          L: "4",
+          M: "5", N: "5",
+          R: "6",
+        };
+        let out = first;
+        let prev = map[first] || "";
+        for (let i = 1; i < cleaned.length && out.length < 4; i++) {
+          const code = map[cleaned[i]] || "";
+          if (!code || code === prev) {
+            prev = code;
+            continue;
+          }
+          out += code;
+          prev = code;
+        }
+        return (out + "000").slice(0, 4);
+      }
+
+      function boundedLevenshteinForHighlight(a, b, maxDistance = 2) {
+        if (a === b) return 0;
+        if (!a || !b) return Math.max(a.length, b.length);
+        if (Math.abs(a.length - b.length) > maxDistance) return maxDistance + 1;
+        const prev = new Uint16Array(b.length + 1);
+        const curr = new Uint16Array(b.length + 1);
+        for (let j = 0; j <= b.length; j++) prev[j] = j;
+        for (let i = 1; i <= a.length; i++) {
+          curr[0] = i;
+          let minInRow = curr[0];
+          for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            const val = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+            curr[j] = val;
+            if (val < minInRow) minInRow = val;
+          }
+          if (minInRow > maxDistance) return maxDistance + 1;
+          prev.set(curr);
+        }
+        return prev[b.length];
+      }
+
+      function rebuildHighlightLexicon() {
+        highlightLexicon.question.clear();
+        highlightLexicon.options.clear();
+        highlightLexicon.explanation.clear();
+        const tokenRegex = /[\p{L}\p{N}]{2,}/gu;
+
+        for (let i = 0; i < ROWS.length; i++) {
+          const row = ROWS[i];
+          for (const scope of ["question", "options", "explanation"]) {
+            const text = row.searchScopesLower?.[scope] || "";
+            const matches = text.match(tokenRegex);
+            if (!matches) continue;
+            for (const token of matches) {
+              highlightLexicon[scope].add(token);
+            }
+          }
+        }
+        highlightRegexCacheKey = "";
+        highlightRegexCacheByScope = {
+          question: null,
+          options: null,
+          explanation: null,
+        };
+      }
+
+      function buildHighlightTermsForScope(searchTextLower, scopeKey) {
+        const queryTokens = tokenizeSearchText(searchTextLower);
+        if (!queryTokens.length) return [];
+
+        const scopeLexicon = highlightLexicon[scopeKey] || new Set();
+        if (!scopeLexicon.size) return queryTokens;
+
+        const expanded = new Set();
+        const lexiconArray = Array.from(scopeLexicon);
+
+        for (const token of queryTokens) {
+          const stemToken = stemForHighlight(token);
+          const sndToken = soundexForHighlight(token);
+          expanded.add(token);
+          expanded.add(stemToken);
+
+          let fuzzyAdded = 0;
+          for (let i = 0; i < lexiconArray.length; i++) {
+            const candidate = lexiconArray[i];
+            if (!candidate) continue;
+
+            if (candidate === token || candidate === stemToken) {
+              expanded.add(candidate);
+              continue;
+            }
+
+            if (candidate.startsWith(token) || token.startsWith(candidate)) {
+              expanded.add(candidate);
+              continue;
+            }
+
+            if (sndToken && soundexForHighlight(candidate) === sndToken) {
+              expanded.add(candidate);
+              continue;
+            }
+
+            const maxDist = token.length <= 4 ? 1 : 2;
+            if (Math.abs(candidate.length - token.length) <= maxDist) {
+              if (boundedLevenshteinForHighlight(token, candidate, maxDist) <= maxDist) {
+                expanded.add(candidate);
+                fuzzyAdded++;
+                if (fuzzyAdded >= 40) break;
+              }
+            }
+          }
         }
 
-        const terms = tokenizeSearchText(searchTextLower);
+        return Array.from(expanded).filter((t) => t && t.length > 1);
+      }
+
+      function getHighlightRegex(searchTextLower, scopeKey) {
+        const scopes = getEffectiveScopes();
+        const cacheKey = [
+          searchTextLower,
+          Number(scopes.scopeQuestion),
+          Number(scopes.scopeOptions),
+          Number(scopes.scopeExplanation),
+        ].join("||");
+
+        if (highlightRegexCacheKey !== cacheKey) {
+          highlightRegexCacheKey = cacheKey;
+          highlightRegexCacheByScope = {
+            question: null,
+            options: null,
+            explanation: null,
+          };
+        }
+
+        if (highlightRegexCacheByScope[scopeKey]) {
+          return highlightRegexCacheByScope[scopeKey];
+        }
+
+        const terms = buildHighlightTermsForScope(searchTextLower, scopeKey);
         if (!terms.length) {
-          highlightCacheQuery = searchTextLower;
-          highlightCacheRegex = null;
+          highlightRegexCacheByScope[scopeKey] = null;
           return null;
         }
 
-        highlightCacheQuery = searchTextLower;
-        highlightCacheRegex = new RegExp(
+        highlightRegexCacheByScope[scopeKey] = new RegExp(
           `(${terms.map(escapeRegExp).join("|")})`,
           "gi",
         );
-        return highlightCacheRegex;
+        return highlightRegexCacheByScope[scopeKey];
       }
 
-      function highlightText(text, searchTextLower) {
+      function highlightText(text, searchTextLower, scopeKey) {
         const raw = String(text || "");
-        if (!searchSettings.highlight || !searchTextLower)
-          return escapeHtml(raw);
+        if (!searchSettings.highlight || !searchTextLower) return escapeHtml(raw);
 
-        const regex = getHighlightRegex(searchTextLower);
+        const scopes = getEffectiveScopes();
+        const scopeEnabled =
+          (scopeKey === "question" && scopes.scopeQuestion) ||
+          (scopeKey === "options" && scopes.scopeOptions) ||
+          (scopeKey === "explanation" && scopes.scopeExplanation);
+
+        if (!scopeEnabled) return escapeHtml(raw);
+
+        const regex = getHighlightRegex(searchTextLower, scopeKey);
         if (!regex) return escapeHtml(raw);
 
         let result = "";
@@ -3726,16 +3887,16 @@
         return result;
       }
 
-      function renderSearchText(el, text, searchTextLower) {
+      function renderSearchText(el, text, searchTextLower, scopeKey = "question") {
         if (!el) return;
-        el.innerHTML = highlightText(text || "", searchTextLower);
+        el.innerHTML = highlightText(text || "", searchTextLower, scopeKey);
       }
 
       function applyDeferredCardHighlights(card, searchTextLower) {
         if (!card || card.dataset.deferredHighlightDone === "1") return;
 
         card.querySelectorAll("[data-opt]").forEach((el) => {
-          renderSearchText(el, el.dataset.searchRaw || "", searchTextLower);
+          renderSearchText(el, el.dataset.searchRaw || "", searchTextLower, "options");
         });
 
         const explEl = card.querySelector('[data-expl="1"]');
@@ -3744,6 +3905,7 @@
             explEl,
             explEl.dataset.searchRaw || "",
             searchTextLower,
+            "explanation",
           );
         }
 
@@ -4039,6 +4201,7 @@
           qtextEl,
           record.exam_robot_question || "",
           searchTextLower,
+          "question",
         );
         if (record.question_id || qid) {
           qmetaEl.classList.add("copyableMeta");
@@ -5268,7 +5431,7 @@
       function refreshVisibleHighlights() {
         const searchTextLower = getSearchTextLower();
         document.querySelectorAll("#app [data-qtext]").forEach((el) => {
-          renderSearchText(el, el.dataset.searchRaw || "", searchTextLower);
+          renderSearchText(el, el.dataset.searchRaw || "", searchTextLower, "question");
         });
         document.querySelectorAll("#app .card").forEach((card) => {
           if (card.dataset.deferredHighlightDone === "1") {
@@ -5713,6 +5876,7 @@
         console.log("[grist.onRecords] DATA.length:", DATA.length);
         ROWS = buildSearchRows(DATA);
         console.log("[grist.onRecords] ROWS.length:", ROWS.length);
+        rebuildHighlightLexicon();
         ALL_ROW_INDICES = ROWS.map((_, idx) => idx);
         buildFacetValueUniverse();
 
@@ -5752,6 +5916,7 @@
             console.log("No data from Grist, initializing with empty state");
             DATA = [];
             ROWS = [];
+            rebuildHighlightLexicon();
             ALL_ROW_INDICES = [];
             buildFacetValueUniverse();
             rebuildFilterSets();
