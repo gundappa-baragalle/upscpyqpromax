@@ -570,8 +570,7 @@
         overflow-y: auto;
         flex-shrink: 0;
         z-index: 99;
-        position: sticky;
-        bottom: 0;
+        position: static;
       }
 
       .activity-bar-item {
@@ -637,17 +636,43 @@
         position: absolute;
         right: 0;
         top: 0;
-        width: 4px;
+        width: 8px;
         height: 100%;
         cursor: col-resize;
         background: transparent;
         transition: background-color var(--transition-fast);
         z-index: 100;
+        display: none;
       }
 
       .sidebar-resize-handle:hover,
       .sidebar-resize-handle.resizing {
         background: var(--accent-primary);
+      }
+
+      @media (min-width: 768px) {
+        .sidebar-resize-handle {
+          display: block;
+          width: 4px;
+        }
+      }
+
+      .sidebar-toggle-btn {
+        display: none;
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        width: 44px;
+        height: 44px;
+        border: none;
+        border-radius: 999px;
+        background: var(--accent-primary);
+        color: #fff;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+        z-index: 97;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
       }
 
       .sidebar-header {
@@ -1678,7 +1703,7 @@
 
       @media (max-width: 1024px) and (min-width: 641px) {
         .layout {
-          grid-template-columns: 200px 1fr;
+          padding: 20px;
         }
         .opts {
           grid-template-columns: 1fr 1fr;
@@ -1686,6 +1711,9 @@
       }
 
       @media (max-width: 640px) {
+        .layout {
+          padding: 16px;
+        }
         .card {
           padding: 16px;
           border-radius: 16px;
@@ -1709,11 +1737,17 @@
           max-width: 100%;
           width: 100%;
           min-width: 0;
+          max-height: 80vh;
           border-radius: 20px 20px 0 0;
           transform: translateY(100%);
+          overflow-y: auto;
+          padding-bottom: 20px;
         }
         .filterPopup.show {
           transform: translateY(0);
+        }
+        .filterPopupList {
+          max-height: calc(80vh - 200px);
         }
       }
 
@@ -1773,16 +1807,23 @@
 
       @media (max-width: 768px) {
         .activity-bar {
-          position: relative;
+          position: static;
           width: 100%;
           height: auto;
           flex-direction: row;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          overflow-y: hidden;
           border-right: none;
           border-bottom: 1px solid rgba(48, 54, 61, 0.4);
           padding: 8px;
-          top: auto;
-          left: auto;
+          order: -1;
+        }
+        .activity-bar-item {
+          flex-shrink: 0;
+        }
+        .sidebar-resize-handle {
+          display: none !important;
         }
         .sidebar-wrapper {
           position: static;
@@ -1790,18 +1831,30 @@
           height: auto;
           border-right: none;
           border-bottom: 1px solid rgba(48, 54, 61, 0.4);
-          max-height: 200px;
+          max-height: 180px;
           flex-direction: row;
           overflow-x: auto;
           overflow-y: hidden;
+          white-space: nowrap;
         }
         .sidebar-wrapper.collapsed {
           width: 100%;
           max-height: 0;
           overflow: hidden;
         }
+        .sidebar-wrapper.collapsed + .sidebar-toggle-btn {
+          display: flex;
+        }
         .sidebar-header {
-          display: none;
+          display: flex;
+          padding: 8px 12px;
+          border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+          min-height: auto;
+          gap: 8px;
+        }
+        .sidebar-title {
+          font-size: 12px;
+          letter-spacing: 0.3px;
         }
         .sidebar-content {
           flex-direction: row;
@@ -1809,6 +1862,13 @@
           gap: 12px;
           overflow-x: auto;
           overflow-y: hidden;
+          white-space: nowrap;
+        }
+        .sidebarTopicItem,
+        .sidebarProgressItem,
+        .sidebarPanelList > * {
+          flex-shrink: 0;
+          white-space: normal;
         }
         .main-content {
           position: static;
@@ -1866,6 +1926,64 @@
           min-width: 28px;
           height: 28px;
           font-size: 12px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .layout {
+          padding: 16px;
+        }
+        header {
+          padding: 12px 16px;
+        }
+        .card {
+          padding: 14px;
+          border-radius: 12px;
+          margin-bottom: 10px;
+        }
+        .opt {
+          padding: 10px;
+          gap: 8px;
+        }
+        .activity-bar-item {
+          width: 36px;
+          height: 36px;
+        }
+        .sidebar-wrapper {
+          max-height: 140px;
+        }
+        .sidebar-header {
+          padding: 6px 10px;
+        }
+        .sidebar-title {
+          font-size: 11px;
+          letter-spacing: 0.3px;
+        }
+        .sidebar-toggle-btn {
+          width: 40px;
+          height: 40px;
+          left: 12px;
+          bottom: 12px;
+          font-size: 18px;
+        }
+        .filterPopup {
+          max-height: 85vh;
+        }
+        .filterPopupList {
+          max-height: calc(85vh - 180px);
+        }
+      }
+
+      @media (max-width: 360px) {
+        .layout {
+          padding: 12px;
+        }
+        header {
+          padding: 10px 12px;
+        }
+        .card {
+          padding: 12px;
+          border-radius: 10px;
         }
       }
 
@@ -2211,6 +2329,16 @@
           </div>
         </div>
       </div>
+
+      <button
+        class="sidebar-toggle-btn"
+        id="sidebarToggleBtn"
+        type="button"
+        aria-label="Show sidebar"
+        title="Show sidebar"
+      >
+        ☰
+      </button>
 
       <!-- Main Content Area -->
       <main class="main-content" id="mainContent">
@@ -5652,6 +5780,7 @@
         const resizeHandle = document.getElementById("sidebarResizeHandle");
         const activityBar = document.querySelector(".activity-bar");
         const sidebarTitle = document.getElementById("sidebarTitle");
+        const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
 
         const DEFAULT_SIDEBAR_WIDTH = 280;
         const MIN_SIDEBAR_WIDTH = 200;
@@ -5678,6 +5807,16 @@
         setSidebarWidth(loadSidebarWidth());
 
         // Panel management
+        // Keep mobile toggle visibility/semantics in sync with collapse state.
+        function syncSidebarToggleButton() {
+          if (!sidebarToggleBtn) return;
+          const isMobile = window.matchMedia("(max-width: 768px)").matches;
+          const isCollapsed = sidebarWrapper.classList.contains("collapsed");
+          sidebarToggleBtn.style.display =
+            isMobile && isCollapsed ? "flex" : "none";
+          sidebarToggleBtn.setAttribute("aria-hidden", String(!(isMobile && isCollapsed)));
+        }
+
         function switchPanel(panelName, forceClose = false) {
           console.log("[switchPanel] Called with panelName:", panelName);
 
@@ -5701,6 +5840,7 @@
           if (isCurrentPanel && forceClose !== false) {
             sidebarWrapper.classList.add("collapsed");
             localStorage.setItem("mcq-sidebar-collapsed", "true");
+            syncSidebarToggleButton();
             return;
           }
 
@@ -5744,6 +5884,7 @@
           }
 
           localStorage.setItem("mcq-active-panel", panelName);
+          syncSidebarToggleButton();
         }
 
         // Activity bar button click handlers
@@ -5762,10 +5903,20 @@
           if (!isCollapsed && isCurrentPanel) {
             sidebarWrapper.classList.add("collapsed");
             localStorage.setItem("mcq-sidebar-collapsed", "true");
+            syncSidebarToggleButton();
           } else {
             switchPanel(panelName);
           }
         });
+
+        if (sidebarToggleBtn) {
+          sidebarToggleBtn.addEventListener("click", () => {
+            const lastPanel = localStorage.getItem("mcq-active-panel") || "stats";
+            switchPanel(lastPanel);
+          });
+        }
+
+        window.addEventListener("resize", syncSidebarToggleButton);
 
         // Restore last active panel or default to stats
         let lastPanel = localStorage.getItem("mcq-active-panel");
@@ -5793,6 +5944,7 @@
           // Explicitly ensure sidebar is not collapsed on first load
           sidebarWrapper.classList.remove("collapsed");
         }
+        syncSidebarToggleButton();
 
         // Safety fallback: Ensure at least one panel is active
         setTimeout(() => {
