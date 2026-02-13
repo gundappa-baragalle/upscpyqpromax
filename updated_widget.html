@@ -3821,6 +3821,11 @@
             facetCountsCache.key = cached.facetsStateKey || facetStateKey;
             latestFacetsKey = candidatesKey;
             latestFacetsStateKey = cached.facetsStateKey || facetStateKey;
+          } else {
+            // Backward-compatibility for old cache entries without facets.
+            facetCountsCache.key = "";
+            latestFacetsKey = null;
+            latestFacetsStateKey = null;
           }
 
           const cachedIndices = cached.indices || [];
@@ -4955,38 +4960,15 @@
 
       function updateFilterButtons() {
         const allFacetCounts = computeAllFacetCountsForState();
-        const countMapByFacet = {
-          exam: new Map(
-            (allFacetCounts.exam || []).map((item) => [
+        const countMapByFacet = {};
+        FACET_KEYS.forEach((facetKey) => {
+          countMapByFacet[facetKey] = new Map(
+            (allFacetCounts[facetKey] || []).map((item) => [
               item.value,
               item.count || 0,
             ]),
-          ),
-          year: new Map(
-            (allFacetCounts.year || []).map((item) => [
-              item.value,
-              item.count || 0,
-            ]),
-          ),
-          subject: new Map(
-            (allFacetCounts.subject || []).map((item) => [
-              item.value,
-              item.count || 0,
-            ]),
-          ),
-          theme: new Map(
-            (allFacetCounts.theme || []).map((item) => [
-              item.value,
-              item.count || 0,
-            ]),
-          ),
-          topic: new Map(
-            (allFacetCounts.topic || []).map((item) => [
-              item.value,
-              item.count || 0,
-            ]),
-          ),
-        };
+          );
+        });
 
         document.querySelectorAll(".filterButton").forEach((btn) => {
           const type = btn.dataset.filter;
