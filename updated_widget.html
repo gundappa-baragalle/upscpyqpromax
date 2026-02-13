@@ -3140,22 +3140,27 @@
 
         function expandQueryToken(token, activeScopes) {
           const base = String(token || "").toLowerCase();
-          const expanded = new Set();
-          if (!base) return expanded;
+          if (!base) return [];
+
+          const seen = new Set();
+          const terms = [];
+          const addTerm = (term, kind, weight) => {
+            const normalized = String(term || "").toLowerCase();
+            if (!normalized || seen.has(normalized)) return;
+            seen.add(normalized);
+            terms.push({ term: normalized, kind, weight });
+          };
 
           const stemmed = stem(base);
-          expanded.add(base);
-          expanded.add(stemmed);
+          addTerm(base, "exact", 1.0);
+          if (stemmed !== base) addTerm(stemmed, "stem", 0.9);
 
-          const prefixes = new Set();
-          if (base.length >= 2) prefixes.add(base.slice(0, 2));
-          if (base.length >= 3) prefixes.add(base.slice(0, 3));
-          if (base.length >= 4) prefixes.add(base.slice(0, 4));
+          const prefixes = [];
+          if (base.length >= 2) prefixes.push(base.slice(0, 2));
+          if (base.length >= 3) prefixes.push(base.slice(0, 3));
+          if (base.length >= 4) prefixes.push(base.slice(0, 4));
 
           for (const scope of activeScopes) {
-            if (indexes[scope].has(base)) expanded.add(base);
-            if (indexes[scope].has(stemmed)) expanded.add(stemmed);
-
             // Prefix search support.
             for (const p of prefixes) {
               const prefTerms = prefixIndex[scope].get(p);
@@ -3163,95 +3168,135 @@
               let added = 0;
               for (const t of prefTerms) {
                 if (t.startsWith(base) || t.startsWith(stemmed)) {
-                  expanded.add(t);
+                  addTerm(t, "prefix", 0.78);
                   added++;
                   if (added >= 24) break;
                 }
               }
             }
 
-            // Phonetic matching (Soundex).
+            // Fuzzy / typo tolerance from nearest prefix neighborhood.
+            const fuzzyPool =
+              prefixIndex[scope].get(base.slice(0, Math.min(3, base.length))) ||
+              new Set();
+            if (fuzzyPool.size) {
+              const maxDistance = base.length <= 4 ? 1 : 2;
+              let added = 0;
+              for (const candidateTerm of fuzzyPool) {
+                if (Math.abs(candidateTerm.length - base.length) > maxDistance)
+                  continue;
+                if (
+                  boundedLevenshtein(base, candidateTerm, maxDistance) <=
+                  maxDistance
+                ) {
+                  addTerm(candidateTerm, "fuzzy", 0.58);
+                  added++;
+                  if (added >= 16) break;
+                }
+              }
+            }
+
+            // Phonetic matching (Soundex) - lowest confidence fallback.
             const phoneticKey = soundex(base);
             if (phoneticKey) {
               const phoneticTerms = phoneticIndex[scope].get(phoneticKey);
               if (phoneticTerms) {
                 let added = 0;
                 for (const t of phoneticTerms) {
-                  expanded.add(t);
+                  // Guard: for short queries, avoid aggressive phonetic expansion.
+                  if (base.length < 6 && !t.startsWith(base.slice(0, 2))) continue;
+                  addTerm(t, "phonetic", 0.22);
                   added++;
-                  if (added >= 20) break;
-                }
-              }
-            }
-
-            // Fuzzy / typo tolerance from nearest prefix neighborhood.
-            const fuzzyPool = prefixIndex[scope].get(base.slice(0, Math.min(3, base.length))) || new Set();
-            if (fuzzyPool.size) {
-              const maxDistance = base.length <= 4 ? 1 : 2;
-              let added = 0;
-              for (const candidateTerm of fuzzyPool) {
-                if (Math.abs(candidateTerm.length - base.length) > maxDistance) continue;
-                if (boundedLevenshtein(base, candidateTerm, maxDistance) <= maxDistance) {
-                  expanded.add(candidateTerm);
-                  added++;
-                  if (added >= 20) break;
+                  if (added >= 12) break;
                 }
               }
             }
           }
 
-          return expanded;
+          return terms;
+        }
+
+        function gatherPostingsForTokenPlan(tokenPlan, activeScopes, allowPhonetic) {
+          const postings = [];
+          for (const entry of tokenPlan.terms) {
+            if (!allowPhonetic && entry.kind === "phonetic") continue;
+            for (const scope of activeScopes) {
+              const list = indexes[scope].get(entry.term);
+              if (list && list.length) postings.push(list);
+            }
+          }
+          if (!postings.length) return [];
+          postings.sort((a, b) => a.length - b.length);
+          return mergeSortedUnique(postings);
         }
 
         // Build search candidates with query optimization.
         function buildSearchCandidates(tokens, scopes) {
-          if (!tokens.length) return rows.map((_, idx) => idx);
+          if (!tokens.length)
+            return {
+              candidates: rows.map((_, idx) => idx),
+              tokenPlans: [],
+              usedPhoneticFallback: false,
+            };
 
           const activeScopes = [];
           if (scopes.scopeQuestion) activeScopes.push("question");
           if (scopes.scopeOptions) activeScopes.push("options");
           if (scopes.scopeExplanation) activeScopes.push("explanation");
-          if (!activeScopes.length) activeScopes.push("question", "options", "explanation");
+          if (!activeScopes.length)
+            activeScopes.push("question", "options", "explanation");
 
-          let candidates = null;
-
-          // Sort tokens by document frequency (rare terms first).
-          const tokenStats = tokens.map((token) => {
+          const tokenPlans = tokens.map((token) => {
             const terms = expandQueryToken(token, activeScopes);
-            let freq = 0;
-            for (const term of terms) {
+            let strictFreq = 0;
+            let broadFreq = 0;
+            for (const entry of terms) {
               for (const scope of activeScopes) {
-                freq += docFrequency[scope].get(term) || 0;
+                const df = docFrequency[scope].get(entry.term) || 0;
+                broadFreq += df;
+                if (entry.kind !== "phonetic") strictFreq += df;
               }
             }
-            return { token, terms, freq };
+            return { token, terms, strictFreq, broadFreq };
           });
-          tokenStats.sort((a, b) => a.freq - b.freq);
 
-          for (const { terms } of tokenStats) {
-            const postings = [];
-            for (const term of terms) {
-              for (const scope of activeScopes) {
-                const list = indexes[scope].get(term);
-                if (list && list.length) postings.push(list);
+          tokenPlans.sort((a, b) => a.strictFreq - b.strictFreq || a.broadFreq - b.broadFreq);
+
+          const buildWithMode = (allowPhonetic) => {
+            let candidates = null;
+            for (const tokenPlan of tokenPlans) {
+              const tokenUnion = gatherPostingsForTokenPlan(
+                tokenPlan,
+                activeScopes,
+                allowPhonetic,
+              );
+              if (!tokenUnion.length) return [];
+
+              if (candidates === null) {
+                candidates = tokenUnion;
+              } else {
+                candidates = intersectSortedGalloping(candidates, tokenUnion);
+                if (!candidates.length) return [];
               }
             }
+            return candidates || [];
+          };
 
-            if (!postings.length) return [];
-
-            postings.sort((a, b) => a.length - b.length);
-            const tokenUnion = mergeSortedUnique(postings);
-            if (!tokenUnion.length) return [];
-
-            if (candidates === null) {
-              candidates = tokenUnion;
-            } else {
-              candidates = intersectSortedGalloping(candidates, tokenUnion);
-              if (!candidates.length) return [];
-            }
+          const strictCandidates = buildWithMode(false);
+          if (strictCandidates.length) {
+            return {
+              candidates: strictCandidates,
+              tokenPlans,
+              usedPhoneticFallback: false,
+            };
           }
 
-          return candidates || [];
+          const broadCandidates = buildWithMode(true);
+          return {
+            candidates: broadCandidates,
+            tokenPlans,
+            usedPhoneticFallback: broadCandidates.length > 0,
+          };
         }
 
         function computeFacets(candidates, filters) {
@@ -3312,8 +3357,9 @@
           const { requestId, tokens, scopes, filters } = payload;
           const tStart = performance.now();
           
-          const candidates = buildSearchCandidates(tokens, scopes);
-          
+          const searchBuild = buildSearchCandidates(tokens, scopes);
+          const candidates = searchBuild.candidates || [];
+
           // BM25 Ranking Phase
           if (tokens.length > 0 && candidates.length > 0) {
              const scores = new Float32Array(rows.length);
@@ -3326,33 +3372,50 @@
              const isCandidate = new Uint8Array(rows.length);
              for (let i = 0; i < candidates.length; i++) isCandidate[candidates[i]] = 1;
              
-             for (const token of tokens) {
-                const searchTerms = expandQueryToken(token, activeScopes);
-                for (const term of searchTerms) {
+             for (const tokenPlan of searchBuild.tokenPlans || []) {
+                const rawToken = tokenPlan.token;
+                for (const entry of tokenPlan.terms) {
+                    if (!searchBuild.usedPhoneticFallback && entry.kind === "phonetic") continue;
+
                     for (const scope of activeScopes) {
-                        const postings = indexes[scope].get(term);
+                        const postings = indexes[scope].get(entry.term);
                         if (!postings) continue;
 
-                        const freqs = termFreqs[scope].get(term);
+                        const freqs = termFreqs[scope].get(entry.term);
                         const N = rows.length;
-                        const n = docFrequency[scope].get(term) || 1;
+                        const n = docFrequency[scope].get(entry.term) || 1;
                         const bm25Idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
                         const tfidfIdf = Math.log(1 + N / n);
                         const avgDl = avgFieldLength[scope] || 1;
-                        const weight = FIELD_WEIGHTS[scope];
+                        const scopeWeight = FIELD_WEIGHTS[scope];
+                        const matchWeight = entry.weight || 0.3;
+                        const exactBoost = entry.kind === "exact" ? 1.25 : 1.0;
 
                         for (let k = 0; k < postings.length; k++) {
                             const docIdx = postings[k];
-                            if (isCandidate[docIdx]) {
-                                const tf = freqs[k];
-                                const dl = docLengths[scope][docIdx] || 1;
-                                const bm25 = bm25Idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgDl))));
-                                const tfidf = (1 + Math.log(tf)) * tfidfIdf;
-                                // Hybrid score: BM25 (primary) + TF-IDF (secondary stability/recall signal)
-                                scores[docIdx] += weight * (bm25 * 0.8 + tfidf * 0.2);
-                            }
+                            if (!isCandidate[docIdx]) continue;
+
+                            const tf = freqs[k];
+                            const dl = docLengths[scope][docIdx] || 1;
+                            const bm25 = bm25Idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgDl))));
+                            const tfidf = (1 + Math.log(tf)) * tfidfIdf;
+                            // Hybrid score: BM25 (primary) + TF-IDF (secondary) with match-confidence weighting.
+                            scores[docIdx] += scopeWeight * matchWeight * exactBoost * (bm25 * 0.85 + tfidf * 0.15);
                         }
                     }
+                }
+
+                // Literal token bonus so direct text matches rank above looser phonetic collisions.
+                for (let i = 0; i < candidates.length; i++) {
+                  const docIdx = candidates[i];
+                  const row = rows[docIdx];
+                  if (!row) continue;
+                  for (const scope of activeScopes) {
+                    const text = row.searchScopesLower?.[scope] || "";
+                    if (text.includes(rawToken)) {
+                      scores[docIdx] += FIELD_WEIGHTS[scope] * 0.9;
+                    }
+                  }
                 }
              }
              // Sort candidates by score descending
@@ -3780,47 +3843,65 @@
         const scopeLexicon = highlightLexicon[scopeKey] || new Set();
         if (!scopeLexicon.size) return queryTokens;
 
-        const expanded = new Set();
+        const strict = new Set();
+        const fuzzy = new Set();
+        const phonetic = new Set();
         const lexiconArray = Array.from(scopeLexicon);
 
         for (const token of queryTokens) {
           const stemToken = stemForHighlight(token);
           const sndToken = soundexForHighlight(token);
-          expanded.add(token);
-          expanded.add(stemToken);
+          strict.add(token);
+          strict.add(stemToken);
 
           let fuzzyAdded = 0;
+          let phoneticAdded = 0;
           for (let i = 0; i < lexiconArray.length; i++) {
             const candidate = lexiconArray[i];
             if (!candidate) continue;
 
             if (candidate === token || candidate === stemToken) {
-              expanded.add(candidate);
+              strict.add(candidate);
               continue;
             }
 
             if (candidate.startsWith(token) || token.startsWith(candidate)) {
-              expanded.add(candidate);
+              strict.add(candidate);
               continue;
             }
 
-            if (sndToken && soundexForHighlight(candidate) === sndToken) {
-              expanded.add(candidate);
-              continue;
-            }
-
-            const maxDist = token.length <= 4 ? 1 : 2;
+            const maxDist = token.length <= 4 ? 1 : token.length <= 7 ? 1 : 2;
             if (Math.abs(candidate.length - token.length) <= maxDist) {
-              if (boundedLevenshteinForHighlight(token, candidate, maxDist) <= maxDist) {
-                expanded.add(candidate);
+              if (
+                boundedLevenshteinForHighlight(token, candidate, maxDist) <= maxDist
+              ) {
+                fuzzy.add(candidate);
                 fuzzyAdded++;
-                if (fuzzyAdded >= 40) break;
+                if (fuzzyAdded >= 20) break;
+                continue;
               }
+            }
+
+            // Phonetic highlights are only a low-confidence fallback and should stay limited.
+            if (
+              sndToken &&
+              token.length >= 6 &&
+              candidate.length >= 6 &&
+              candidate.slice(0, 2) === token.slice(0, 2) &&
+              soundexForHighlight(candidate) === sndToken
+            ) {
+              phonetic.add(candidate);
+              phoneticAdded++;
+              if (phoneticAdded >= 8) break;
             }
           }
         }
 
-        return Array.from(expanded).filter((t) => t && t.length > 1);
+        const out = new Set([...strict, ...fuzzy]);
+        if (!out.size) {
+          for (const t of phonetic) out.add(t);
+        }
+        return Array.from(out).filter((t) => t && t.length > 1);
       }
 
       function getHighlightRegex(searchTextLower, scopeKey) {
