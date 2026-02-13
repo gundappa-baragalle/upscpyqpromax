@@ -238,6 +238,12 @@
         box-shadow: 0 0 0 1px var(--accent-soft);
       }
 
+      .filterButton.hasZeroMatchSelection .count {
+        background: rgba(248, 81, 73, 0.2);
+        border-color: rgba(248, 81, 73, 0.8);
+        color: #ffb4ad;
+      }
+
       .filterButton:hover {
         transform: translateY(-1px);
         background: var(--bg-card);
@@ -495,6 +501,21 @@
         box-shadow:
           0 0 0 4px rgba(63, 185, 80, 0.2),
           0 4px 8px rgba(63, 185, 80, 0.3);
+      }
+
+      .filterItemToggle.warningZeroMatch {
+        border: 2px solid #f85149;
+      }
+
+      .filterItemToggle.active.warningZeroMatch {
+        border-color: #f85149;
+        box-shadow:
+          0 0 0 4px rgba(248, 81, 73, 0.2),
+          0 4px 8px rgba(248, 81, 73, 0.25);
+      }
+
+      .filterItemCount.warningZeroMatch {
+        color: #ff7b72;
       }
 
       .filterSectionDivider {
@@ -1922,7 +1943,7 @@
           // Save to localStorage
           try {
             localStorage.setItem(this.storageKey, JSON.stringify(this.state));
-            console.debug(
+            debugLog(
               `[perf] State flushed ${this.pendingChanges.size} changes in ${(performance.now() - t0).toFixed(1)}ms`,
             );
           } catch (e) {
@@ -2060,6 +2081,197 @@
         "exam_robot_answer_sources",
       ];
       const SEARCH_SETTINGS_KEY = "mcq_search_settings_v1";
+      const DEBUG = false;
+      const ENABLE_PERF_HELPERS = (() => {
+        if (DEBUG) return true;
+        if (new URLSearchParams(window.location.search).get("perf") === "1") {
+          return true;
+        }
+        try {
+          return window.localStorage.getItem("mcq_perf_helpers") === "1";
+        } catch (_) {
+          return false;
+        }
+      })();
+
+      const perfMetrics = {
+        searchLatencies: [],
+        workerQueryTimes: [],
+        facetOpenTimes: [],
+        renderBatchTimes: [],
+        facetComputeTimes: [],
+      };
+      window.__perfMetrics = perfMetrics;
+
+      function debugLog(...args) {
+        if (!DEBUG) return;
+        console.debug(...args);
+      }
+
+      function recordPerfMetric(bucket, value) {
+        if (!perfMetrics[bucket] || !Number.isFinite(value)) return;
+        const arr = perfMetrics[bucket];
+        arr.push(value);
+        if (arr.length > 100) arr.shift();
+      }
+
+      function median(values) {
+        if (!values || !values.length) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        if (sorted.length % 2 === 0) {
+          return (sorted[mid - 1] + sorted[mid]) / 2;
+        }
+        return sorted[mid];
+      }
+
+      function percentile(values, p = 95) {
+        if (!values || !values.length) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const idx = Math.max(
+          0,
+          Math.min(
+            sorted.length - 1,
+            Math.ceil((p / 100) * sorted.length) - 1,
+          ),
+        );
+        return sorted[idx];
+      }
+
+      function dumpPerfMetrics() {
+        const keys = [
+          "searchLatencies",
+          "facetOpenTimes",
+          "renderBatchTimes",
+          "workerQueryTimes",
+          "facetComputeTimes",
+        ];
+        const output = {};
+        keys.forEach((key) => {
+          const values = perfMetrics[key] || [];
+          output[key] = {
+            count: values.length,
+            median: Number(median(values).toFixed(2)),
+            p95: Number(percentile(values, 95).toFixed(2)),
+          };
+        });
+        console.table(output);
+        return output;
+      }
+
+      function resetPerfMetrics() {
+        Object.keys(perfMetrics).forEach((key) => {
+          perfMetrics[key] = [];
+        });
+      }
+
+      async function runQuickBenchmark() {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const searchInput = document.getElementById("clientSearch");
+        const filterButtons = Array.from(document.querySelectorAll(".filterButton"));
+        if (!searchInput || !filterButtons.length) {
+          console.warn("Benchmark skipped: missing required UI controls");
+          return dumpPerfMetrics();
+        }
+
+        const queries = [
+          "fiscal policy",
+          "macro micro",
+          "inflation trade",
+          "topic 12",
+          "zzzz-no-hit",
+        ];
+
+        const runSearches = async () => {
+          for (const query of queries) {
+            searchInput.value = query;
+            searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+            await wait(360);
+          }
+        };
+
+        const openCloseFacets = async () => {
+          const filterCancelBtn = document.getElementById("filterCancel");
+          for (let i = 0; i < Math.min(5, filterButtons.length); i++) {
+            filterButtons[i].click();
+            await wait(220);
+            if (filterCancelBtn) filterCancelBtn.click();
+            await wait(160);
+          }
+        };
+
+        const toggleSingleFilter = async () => {
+          const firstBtn = filterButtons[0];
+          if (!firstBtn) return;
+          firstBtn.click();
+          await wait(220);
+          const firstToggle = document.querySelector(".filterItemToggle");
+          if (firstToggle) {
+            firstToggle.click();
+            await wait(120);
+            firstToggle.click();
+            await wait(120);
+          }
+          const applyBtn = document.getElementById("filterApply");
+          const cancelBtn = document.getElementById("filterCancel");
+          if (applyBtn) applyBtn.click();
+          else if (cancelBtn) cancelBtn.click();
+          await wait(220);
+        };
+
+        await runSearches();
+        await openCloseFacets();
+        await toggleSingleFilter();
+        await runSearches();
+
+        return dumpPerfMetrics();
+      }
+
+      function runQuickBenchmarkNow() {
+        return runQuickBenchmark().then((out) => {
+          console.log("Benchmark complete", out);
+          return out;
+        });
+      }
+
+      const disabledPerfHelpers = {
+        resetMetrics() {
+          console.warn(
+            "Perf helpers are disabled in production. Enable with ?perf=1 or localStorage.mcq_perf_helpers='1'.",
+          );
+          return null;
+        },
+        dumpMetrics: dumpPerfMetrics,
+        runQuickBenchmark() {
+          console.warn(
+            "runQuickBenchmark is disabled in production. Enable with ?perf=1 or localStorage.mcq_perf_helpers='1'.",
+          );
+          return dumpPerfMetrics();
+        },
+        runQuickBenchmarkNow() {
+          return this.runQuickBenchmark();
+        },
+      };
+
+      const perfHelpers = ENABLE_PERF_HELPERS
+        ? {
+            resetMetrics: resetPerfMetrics,
+            dumpMetrics: dumpPerfMetrics,
+            runQuickBenchmark,
+            runQuickBenchmarkNow,
+          }
+        : disabledPerfHelpers;
+
+      window.__perfHelpers = perfHelpers;
+      window._perfHelpers = perfHelpers;
+      window.perfHelpers = perfHelpers;
+      globalThis.__perfHelpers = perfHelpers;
+      globalThis._perfHelpers = perfHelpers;
+      globalThis.perfHelpers = perfHelpers;
+      if (ENABLE_PERF_HELPERS) {
+        debugLog("Perf helpers enabled. Use window.perfHelpers.* in console.");
+      }
+
       let searchSettings = {
         scopeQuestion: true,
         scopeOptions: true,
@@ -2157,6 +2369,21 @@
       function buildSearchRows(data) {
         const t0 = performance.now();
         const rows = data.map((r, index) => {
+          const questionScope = r.exam_robot_question || "";
+          const optionsScope = [
+            r.exam_robot_option_a || "",
+            r.exam_robot_option_b || "",
+            r.exam_robot_option_c || "",
+            r.exam_robot_option_d || "",
+          ].join("\n");
+          const explanationScope = [
+            r.exam_robot_explanation || "",
+            r.exam_robot_verdict || "",
+            r.exam_robot_how_to_study || "",
+            r.exam_robot_vault || "",
+            r.exam_robot_answer_sources || "",
+          ].join("\n");
+
           return {
             index,
             record: r,
@@ -2166,24 +2393,18 @@
             theme: r.exam_robot_theme || "",
             topic: (r.exam_robot_topic || "").trim(),
             searchScopes: {
-              question: r.exam_robot_question || "",
-              options: [
-                r.exam_robot_option_a || "",
-                r.exam_robot_option_b || "",
-                r.exam_robot_option_c || "",
-                r.exam_robot_option_d || "",
-              ].join("\n"),
-              explanation: [
-                r.exam_robot_explanation || "",
-                r.exam_robot_verdict || "",
-                r.exam_robot_how_to_study || "",
-                r.exam_robot_vault || "",
-                r.exam_robot_answer_sources || "",
-              ].join("\n"),
+              question: questionScope,
+              options: optionsScope,
+              explanation: explanationScope,
+            },
+            searchScopesLower: {
+              question: questionScope.toLowerCase(),
+              options: optionsScope.toLowerCase(),
+              explanation: explanationScope.toLowerCase(),
             },
           };
         });
-        console.debug(
+        debugLog(
           `[perf] buildSearchRows: ${rows.length} rows in ${(performance.now() - t0).toFixed(1)}ms`,
         );
         return rows;
@@ -2236,13 +2457,39 @@
           return out;
         }
 
-        function unionSorted(lists) {
-          const merged = new Set();
-          for (const list of lists) {
-            if (!list) continue;
-            for (const id of list) merged.add(id);
+        function mergeSortedUnique(lists) {
+          const positions = new Array(lists.length).fill(0);
+          const output = [];
+          let last = -1;
+
+          while (true) {
+            let minValue = Infinity;
+            let hasValue = false;
+
+            for (let i = 0; i < lists.length; i++) {
+              const list = lists[i];
+              const pos = positions[i];
+              if (pos >= list.length) continue;
+              const value = list[pos];
+              if (value < minValue) minValue = value;
+              hasValue = true;
+            }
+
+            if (!hasValue) break;
+            if (minValue !== last) {
+              output.push(minValue);
+              last = minValue;
+            }
+
+            for (let i = 0; i < lists.length; i++) {
+              const list = lists[i];
+              let pos = positions[i];
+              while (pos < list.length && list[pos] <= minValue) pos++;
+              positions[i] = pos;
+            }
           }
-          return Array.from(merged).sort((a, b) => a - b);
+
+          return output;
         }
 
         function buildSearchCandidates(tokens, scopes) {
@@ -2255,7 +2502,15 @@
           if (!activeScopes.length) activeScopes.push("question", "options", "explanation");
 
           for (const token of tokens) {
-            const tokenUnion = unionSorted(activeScopes.map((scope) => indexes[scope].get(token) || []));
+            const postings = [];
+            for (let i = 0; i < activeScopes.length; i++) {
+              const list = indexes[activeScopes[i]].get(token);
+              if (list && list.length) postings.push(list);
+            }
+            if (!postings.length) return [];
+
+            postings.sort((a, b) => a.length - b.length);
+            const tokenUnion = postings.length === 1 ? postings[0] : mergeSortedUnique(postings);
             if (!tokenUnion.length) return [];
             candidates = candidates === null ? tokenUnion : intersectSorted(candidates, tokenUnion);
             if (!candidates.length) return [];
@@ -2274,7 +2529,9 @@
 
         function runSearch(payload) {
           const { requestId, tokens, scopes, filters } = payload;
+          const tStart = performance.now();
           const candidates = buildSearchCandidates(tokens, scopes);
+          const queryMs = performance.now() - tStart;
           let firstBatch = [];
           const allMatches = [];
 
@@ -2285,8 +2542,8 @@
             if (firstBatch.length < 50) firstBatch.push(idx);
           }
 
-          postMessage({ type: "FIRST_BATCH", requestId, indices: firstBatch, count: allMatches.length, candidates });
-          postMessage({ type: "SEARCH_DONE", requestId, indices: allMatches, count: allMatches.length, candidates });
+          postMessage({ type: "FIRST_BATCH", requestId, indices: firstBatch, count: allMatches.length, candidates, queryMs });
+          postMessage({ type: "SEARCH_DONE", requestId, indices: allMatches, count: allMatches.length, candidates, queryMs });
         }
 
         self.onmessage = (event) => {
@@ -2303,13 +2560,20 @@
       let searchWorker = null;
       let searchWorkerReady = false;
       let lastSearchRequestId = 0;
+      let pendingSearchInputAt = null;
+      let pendingFacetOpenAt = null;
       let latestSearchCandidateIndices = [];
+      let latestSearchCandidatesKey = null;
       let latestFilteredRecords = [];
+      const SEARCH_CACHE_MAX_ENTRIES = 200;
       const searchResultCache = new Map();
+      let ALL_ROW_INDICES = [];
 
       function invalidateSearchCache(reason = "unknown") {
         searchResultCache.clear();
-        console.debug(`[perf] search cache invalidated (${reason})`);
+        latestSearchCandidatesKey = null;
+        facetCountsCache.key = "";
+        debugLog(`[perf] search cache invalidated (${reason})`);
       }
 
       function getSearchCacheKey(searchTextLower, scopes, filters) {
@@ -2323,6 +2587,35 @@
           `e:${Number(scopes.scopeExplanation)}`,
           filterKey,
         ].join("||");
+      }
+
+      function getSearchCandidatesKey(searchTextLower, scopes) {
+        return [
+          searchTextLower,
+          `q:${Number(scopes.scopeQuestion)}`,
+          `o:${Number(scopes.scopeOptions)}`,
+          `e:${Number(scopes.scopeExplanation)}`,
+        ].join("||");
+      }
+
+      function getCachedSearchResult(cacheKey) {
+        if (!searchResultCache.has(cacheKey)) return null;
+        const value = searchResultCache.get(cacheKey);
+        searchResultCache.delete(cacheKey);
+        searchResultCache.set(cacheKey, value);
+        return value;
+      }
+
+      function setCachedSearchResult(cacheKey, payload) {
+        if (!cacheKey) return;
+        if (searchResultCache.has(cacheKey)) {
+          searchResultCache.delete(cacheKey);
+        }
+        searchResultCache.set(cacheKey, payload);
+        if (searchResultCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+          const oldestKey = searchResultCache.keys().next().value;
+          searchResultCache.delete(oldestKey);
+        }
       }
 
       function initSearchWorker(rows) {
@@ -2343,19 +2636,22 @@
           const payload = event.data || {};
           if (payload.type === "INIT_DONE") {
             searchWorkerReady = true;
-            console.debug(
+            debugLog(
               `[perf] search worker initialized (${payload.count} rows)`,
             );
+            scheduleFilteredUpdate();
             return;
           }
 
           if (payload.requestId !== lastSearchRequestId) return;
 
           if (payload.type === "FIRST_BATCH") {
+            recordPerfMetric("workerQueryTimes", payload.queryMs || 0);
             const firstBatchRecords = (payload.indices || []).map(
               (idx) => ROWS[idx].record,
             );
             latestSearchCandidateIndices = payload.candidates || [];
+            latestSearchCandidatesKey = searchWorker._activeCandidatesKey || null;
             latestFilteredRecords = firstBatchRecords;
             renderFilteredData(firstBatchRecords, {
               partial: true,
@@ -2369,14 +2665,13 @@
               (idx) => ROWS[idx].record,
             );
             latestSearchCandidateIndices = payload.candidates || [];
+            latestSearchCandidatesKey = searchWorker._activeCandidatesKey || null;
             latestFilteredRecords = allRecords;
             const cacheKey = searchWorker._activeCacheKey;
-            if (cacheKey) {
-              searchResultCache.set(cacheKey, {
-                records: allRecords,
-                candidates: latestSearchCandidateIndices,
-              });
-            }
+            setCachedSearchResult(cacheKey, {
+              indices: payload.indices || [],
+              candidates: latestSearchCandidateIndices,
+            });
             renderFilteredData(allRecords, {
               partial: false,
               totalCount: payload.count || allRecords.length,
@@ -2447,7 +2742,7 @@
           );
         });
 
-        console.debug(
+        debugLog(
           `[perf] buildFacetValueUniverse in ${(performance.now() - t0).toFixed(1)}ms`,
         );
       }
@@ -2506,18 +2801,36 @@
         return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       }
 
+      let highlightCacheQuery = "";
+      let highlightCacheRegex = null;
+
+      function getHighlightRegex(searchTextLower) {
+        if (highlightCacheRegex && highlightCacheQuery === searchTextLower) {
+          return highlightCacheRegex;
+        }
+
+        const terms = tokenizeSearchText(searchTextLower);
+        if (!terms.length) {
+          highlightCacheQuery = searchTextLower;
+          highlightCacheRegex = null;
+          return null;
+        }
+
+        highlightCacheQuery = searchTextLower;
+        highlightCacheRegex = new RegExp(
+          `(${terms.map(escapeRegExp).join("|")})`,
+          "gi",
+        );
+        return highlightCacheRegex;
+      }
+
       function highlightText(text, searchTextLower) {
         const raw = String(text || "");
         if (!searchSettings.highlight || !searchTextLower)
           return escapeHtml(raw);
 
-        const terms = tokenizeSearchText(searchTextLower);
-        if (!terms.length) return escapeHtml(raw);
-
-        const regex = new RegExp(
-          `(${terms.map(escapeRegExp).join("|")})`,
-          "gi",
-        );
+        const regex = getHighlightRegex(searchTextLower);
+        if (!regex) return escapeHtml(raw);
         return escapeHtml(raw).replace(
           regex,
           '<mark class="searchHit">$1</mark>',
@@ -2529,11 +2842,33 @@
         el.innerHTML = highlightText(text || "", searchTextLower);
       }
 
+      function applyDeferredCardHighlights(card, searchTextLower) {
+        if (!card || card.dataset.deferredHighlightDone === "1") return;
+
+        card.querySelectorAll("[data-opt]").forEach((el) => {
+          renderSearchText(el, el.dataset.searchRaw || "", searchTextLower);
+        });
+
+        const explEl = card.querySelector('[data-expl="1"]');
+        if (explEl) {
+          renderSearchText(explEl, explEl.dataset.searchRaw || "", searchTextLower);
+        }
+
+        card.dataset.deferredHighlightDone = "1";
+      }
+
       function getBaseMatches(activeFilters, excludeFacetKey = null) {
-        const source =
-          latestSearchCandidateIndices.length > 0 || !getSearchTextLower()
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const expectedCandidatesKey = getSearchCandidatesKey(
+          searchTextLower,
+          scopes,
+        );
+        const source = !searchTextLower
+          ? ALL_ROW_INDICES
+          : latestSearchCandidatesKey === expectedCandidatesKey
             ? latestSearchCandidateIndices
-            : ROWS.map((_, idx) => idx);
+            : [];
         const indices = [];
 
         for (let i = 0; i < source.length; i++) {
@@ -2550,19 +2885,78 @@
         return indices.map((i) => ROWS[i].record);
       }
 
+      function buildFallbackSearchCandidates(searchTextLower, scopes) {
+        const tokens = tokenizeSearchText(searchTextLower);
+        if (!tokens.length) return ALL_ROW_INDICES;
+
+        const activeScopes = [];
+        if (scopes.scopeQuestion) activeScopes.push("question");
+        if (scopes.scopeOptions) activeScopes.push("options");
+        if (scopes.scopeExplanation) activeScopes.push("explanation");
+        if (!activeScopes.length)
+          activeScopes.push("question", "options", "explanation");
+
+        const indices = [];
+        for (let i = 0; i < ROWS.length; i++) {
+          const row = ROWS[i];
+          const questionText = row.searchScopesLower?.question || "";
+          const optionsText = row.searchScopesLower?.options || "";
+          const explanationText = row.searchScopesLower?.explanation || "";
+
+          const tokenFoundInActiveScope = (token) => {
+            if (activeScopes.includes("question") && questionText.includes(token))
+              return true;
+            if (activeScopes.includes("options") && optionsText.includes(token))
+              return true;
+            if (
+              activeScopes.includes("explanation") &&
+              explanationText.includes(token)
+            )
+              return true;
+            return false;
+          };
+
+          let match = true;
+          for (let t = 0; t < tokens.length; t++) {
+            if (!tokenFoundInActiveScope(tokens[t])) {
+              match = false;
+              break;
+            }
+          }
+
+          if (match) indices.push(i);
+        }
+
+        return indices;
+      }
+
       function runSearchPipeline() {
+        const searchTextLower = getSearchTextLower();
+        const scopes = getEffectiveScopes();
+        const candidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
+
         if (!searchWorkerReady || !searchWorker) {
-          latestSearchCandidateIndices = ROWS.map((_, idx) => idx);
-          latestFilteredRecords = ROWS.map((row) => row.record);
-          renderFilteredData(latestFilteredRecords, {
+          const fallbackCandidates = buildFallbackSearchCandidates(
+            searchTextLower,
+            scopes,
+          );
+          const fallbackFiltered = [];
+          for (let i = 0; i < fallbackCandidates.length; i++) {
+            const idx = fallbackCandidates[i];
+            if (!rowMatchesFilters(ROWS[idx], currentFilterSets)) continue;
+            fallbackFiltered.push(ROWS[idx].record);
+          }
+
+          latestSearchCandidateIndices = fallbackCandidates;
+          latestSearchCandidatesKey = candidatesKey;
+          latestFilteredRecords = fallbackFiltered;
+          renderFilteredData(fallbackFiltered, {
             partial: false,
-            totalCount: latestFilteredRecords.length,
+            totalCount: fallbackFiltered.length,
           });
           return;
         }
 
-        const searchTextLower = getSearchTextLower();
-        const scopes = getEffectiveScopes();
         const filtersPayload = getFiltersPayload();
         const cacheKey = getSearchCacheKey(
           searchTextLower,
@@ -2570,10 +2964,12 @@
           filtersPayload,
         );
 
-        if (searchResultCache.has(cacheKey)) {
-          const cached = searchResultCache.get(cacheKey);
+        const cached = getCachedSearchResult(cacheKey);
+        if (cached) {
           latestSearchCandidateIndices = cached.candidates || [];
-          latestFilteredRecords = cached.records || [];
+          latestSearchCandidatesKey = candidatesKey;
+          const cachedIndices = cached.indices || [];
+          latestFilteredRecords = cachedIndices.map((idx) => ROWS[idx].record);
           renderFilteredData(latestFilteredRecords, {
             partial: false,
             totalCount: latestFilteredRecords.length,
@@ -2583,6 +2979,7 @@
 
         const requestId = ++lastSearchRequestId;
         searchWorker._activeCacheKey = cacheKey;
+        searchWorker._activeCandidatesKey = candidatesKey;
         searchWorker.postMessage({
           type: "SEARCH",
           requestId,
@@ -2662,7 +3059,7 @@
           const optText = card.querySelector(`[data-opt="${letter}"]`);
           if (optText) {
             optText.dataset.searchRaw = opts[letter] || "";
-            renderSearchText(optText, opts[letter], searchTextLower);
+            optText.textContent = opts[letter] || "";
           }
 
           const optEl = card.querySelector(`[data-letter="${letter}"]`);
@@ -2675,11 +3072,8 @@
         const explEl = card.querySelector('[data-expl="1"]');
         explEl.dataset.searchRaw =
           record.exam_robot_explanation || "No explanation available";
-        renderSearchText(
-          explEl,
-          record.exam_robot_explanation || "No explanation available",
-          searchTextLower,
-        );
+        explEl.textContent =
+          record.exam_robot_explanation || "No explanation available";
         card.querySelector('[data-sources="1"]').textContent =
           record.exam_robot_answer_sources || "No sources provided";
         card.querySelector('[data-verdict="1"]').textContent =
@@ -2698,6 +3092,7 @@
         const correctOpt = (record.exam_robot_correct_option || "")
           .trim()
           .toUpperCase();
+        card.dataset.correctOpt = correctOpt;
         const resPanel = card.querySelector('[data-result="1"]');
         const resText = card.querySelector('[data-result-text="1"]');
 
@@ -2724,84 +3119,83 @@
             if (letter === st.answer && st.answer !== correctOpt)
               optEl.classList.add("wrong");
           }
+          applyDeferredCardHighlights(card, searchTextLower);
         }
 
-        // Event delegation will handle clicks
-        attachCardEventHandlers(card, qid, correctOpt);
+        // Event delegation handles card clicks at container level
 
-        console.debug(
+        debugLog(
           `[perf] buildCard in ${(performance.now() - t0).toFixed(1)}ms`,
         );
         return card;
       }
 
-      function attachCardEventHandlers(card, qid, correctOpt) {
-        // Section button handlers
-        card.querySelectorAll("[data-section]").forEach((btn) => {
-          btn.addEventListener("click", (e) => {
-            const section = btn.getAttribute("data-section");
-            card
-              .querySelectorAll("[data-section]")
-              .forEach((b) => b.classList.remove("active"));
-            btn.classList.add("active");
-            card
-              .querySelectorAll("[data-content]")
-              .forEach((c) => c.classList.remove("show"));
-            card
-              .querySelector(`[data-content="${section}"]`)
-              .classList.add("show");
-          });
-        });
+      function handleCardSectionToggle(card, section, btn) {
+        card
+          .querySelectorAll("[data-section]")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        card
+          .querySelectorAll("[data-content]")
+          .forEach((c) => c.classList.remove("show"));
+        const content = card.querySelector(`[data-content="${section}"]`);
+        if (content) content.classList.add("show");
+      }
 
-        // Main card click handler
-        card.addEventListener("click", async (e) => {
-          const titleEl = e.target.closest("[data-copy-qid]");
-          if (titleEl) {
-            const idToCopy = titleEl.getAttribute("data-copy-qid") || "";
-            const copied = await copyTextToClipboard(idToCopy);
-            showToast(
-              copied
-                ? `Copied question_id: ${idToCopy}`
-                : "Unable to copy question_id",
-            );
-            return;
-          }
+      async function handleCardActionClick(e) {
+        const card = e.target.closest(".card");
+        if (!card) return;
 
-          // Eliminate button
-          const xBtn = e.target.closest("[data-x]");
-          if (xBtn) {
-            e.stopPropagation();
-            const letter = xBtn.getAttribute("data-x");
-            const cur = stateManager.get(qid);
-            cur.eliminated = cur.eliminated || {};
-            cur.eliminated[letter] = !cur.eliminated[letter];
-            stateManager.set(qid, cur);
+        const qid = card.dataset.qid || "";
+        const correctOpt = (card.dataset.correctOpt || "").toUpperCase();
 
-            const optEl = xBtn.closest(".opt");
-            if (optEl) {
-              optEl.classList.toggle("strike", cur.eliminated[letter]);
-            }
-            return;
-          }
+        const sectionBtn = e.target.closest("[data-section]");
+        if (sectionBtn) {
+          const section = sectionBtn.getAttribute("data-section");
+          if (section) handleCardSectionToggle(card, section, sectionBtn);
+          applyDeferredCardHighlights(card, getSearchTextLower());
+          return;
+        }
 
-          // Option selection
-          const opt = e.target.closest(".opt");
-          if (opt && !e.target.closest("[data-x]")) {
-            if (opt.classList.contains("strike")) return;
-            const letter = opt.dataset.letter;
-            const cur = stateManager.get(qid);
-            cur.answer = letter;
-            cur.isCorrect = letter === correctOpt;
-            stateManager.set(qid, cur);
+        const titleEl = e.target.closest("[data-copy-qid]");
+        if (titleEl) {
+          const idToCopy = titleEl.getAttribute("data-copy-qid") || "";
+          const copied = await copyTextToClipboard(idToCopy);
+          showToast(copied ? `Copied question_id: ${idToCopy}` : "Unable to copy question_id");
+          return;
+        }
 
-            const resPanel = card.querySelector('[data-result="1"]');
-            const resText = card.querySelector('[data-result-text="1"]');
+        const xBtn = e.target.closest("[data-x]");
+        if (xBtn) {
+          e.stopPropagation();
+          const letter = xBtn.getAttribute("data-x");
+          const cur = stateManager.get(qid);
+          cur.eliminated = cur.eliminated || {};
+          cur.eliminated[letter] = !cur.eliminated[letter];
+          stateManager.set(qid, cur);
 
-            resPanel.classList.add("show");
-            const isCorrect = letter === correctOpt;
-            const badgeClass = isCorrect ? "success" : "error";
-            const badgeText = isCorrect ? "✅ Correct!" : "❌ Incorrect";
-            resText.innerHTML = `
+          const optEl = xBtn.closest(".opt");
+          if (optEl) optEl.classList.toggle("strike", cur.eliminated[letter]);
+          return;
+        }
+
+        const opt = e.target.closest(".opt");
+        if (opt && !e.target.closest("[data-x]")) {
+          if (opt.classList.contains("strike")) return;
+          const letter = opt.dataset.letter;
+          const cur = stateManager.get(qid);
+          cur.answer = letter;
+          cur.isCorrect = letter === correctOpt;
+          stateManager.set(qid, cur);
+
+          const resPanel = card.querySelector('[data-result="1"]');
+          const resText = card.querySelector('[data-result-text="1"]');
+
+          resPanel.classList.add("show");
+          const isCorrect = letter === correctOpt;
+          const badgeClass = isCorrect ? "success" : "error";
+          const badgeText = isCorrect ? "✅ Correct!" : "❌ Incorrect";
+          resText.innerHTML = `
         <div class="resultHeader">
           <div class="resultSummary">
             <span class="resultBadge ${badgeClass}">${badgeText}</span>
@@ -2811,56 +3205,49 @@
         </div>
       `;
 
-            for (const optEl of card.querySelectorAll(".opt")) {
-              const L = optEl.dataset.letter;
-              optEl.classList.remove("correct", "wrong");
-              if (L === correctOpt) optEl.classList.add("correct");
-              if (L === letter && letter !== correctOpt)
-                optEl.classList.add("wrong");
-            }
-
-            card.dataset.answered = isCorrect ? "true" : "false";
-            showToast(
-              isCorrect
-                ? "Great job! Correct answer."
-                : "Incorrect. Keep going!",
-            );
-            if (isCorrect) spawnConfetti();
-
-            setTimeout(() => {
-              resPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            }, 100);
-
-            updateHeaderStats();
-            return;
+          for (const optEl of card.querySelectorAll(".opt")) {
+            const L = optEl.dataset.letter;
+            optEl.classList.remove("correct", "wrong");
+            if (L === correctOpt) optEl.classList.add("correct");
+            if (L === letter && letter !== correctOpt) optEl.classList.add("wrong");
           }
 
-          // Reset button
-          const resetBtn = e.target.closest("[data-reset]");
-          if (resetBtn) {
-            if (
-              confirm(
-                "Reset this question? This will clear your answer and eliminations.",
-              )
-            ) {
-              stateManager.delete(qid);
-              scheduleFilteredUpdate();
-            }
-            return;
-          }
+          card.dataset.answered = isCorrect ? "true" : "false";
+          applyDeferredCardHighlights(card, getSearchTextLower());
+          showToast(isCorrect ? "Great job! Correct answer." : "Incorrect. Keep going!");
+          if (isCorrect) spawnConfetti();
 
-          // Collapse button
-          const collapseBtn = e.target.closest("[data-collapse]");
-          if (collapseBtn) {
-            const resPanel = card.querySelector('[data-result="1"]');
-            resPanel.classList.toggle("collapsed");
-            collapseBtn.textContent = resPanel.classList.contains("collapsed")
-              ? "Expand"
-              : "Collapse";
-            return;
+          setTimeout(() => {
+            resPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 100);
+
+          updateHeaderStats();
+          return;
+        }
+
+        const resetBtn = e.target.closest("[data-reset]");
+        if (resetBtn) {
+          if (confirm("Reset this question? This will clear your answer and eliminations.")) {
+            stateManager.delete(qid);
+            scheduleFilteredUpdate();
           }
-        });
+          return;
+        }
+
+        const collapseBtn = e.target.closest("[data-collapse]");
+        if (collapseBtn) {
+          const resPanel = card.querySelector('[data-result="1"]');
+          resPanel.classList.toggle("collapsed");
+          collapseBtn.textContent = resPanel.classList.contains("collapsed")
+            ? "Expand"
+            : "Collapse";
+          return;
+        }
       }
+
+      document.getElementById("app").addEventListener("click", (e) => {
+        handleCardActionClick(e);
+      });
 
       // ============================================================================
       // RENDERING AND VIRTUAL SCROLLING
@@ -2870,7 +3257,9 @@
       let renderObserver = null;
       let loadSentinel = null;
       let emptyStateEl = null;
-      const BATCH_SIZE = 50; // Increased from 40
+      const MIN_BATCH_SIZE = 12;
+      const MAX_BATCH_SIZE = 120;
+      const RENDER_FRAME_BUDGET_MS = 8;
 
       function buildEmptyStateElement() {
         const emptyState = document.createElement("div");
@@ -2889,16 +3278,23 @@
         const t0 = performance.now();
         const app = document.getElementById("app");
         const fragment = document.createDocumentFragment();
-        const end = Math.min(
-          renderCursor + BATCH_SIZE,
-          currentFilteredRecords.length,
-        );
+        const deadline = t0 + RENDER_FRAME_BUDGET_MS;
 
-        for (let i = renderCursor; i < end; i++) {
-          fragment.appendChild(buildCard(currentFilteredRecords[i], i));
+        let rendered = 0;
+        while (
+          renderCursor < currentFilteredRecords.length &&
+          rendered < MAX_BATCH_SIZE
+        ) {
+          fragment.appendChild(
+            buildCard(currentFilteredRecords[renderCursor], renderCursor),
+          );
+          renderCursor++;
+          rendered++;
+
+          if (rendered >= MIN_BATCH_SIZE && performance.now() >= deadline) {
+            break;
+          }
         }
-
-        renderCursor = end;
 
         if (loadSentinel) loadSentinel.remove();
         app.appendChild(fragment);
@@ -2911,8 +3307,10 @@
           app.appendChild(loadSentinel);
         }
 
-        console.debug(
-          `[perf] renderNextBatch: ${end - (renderCursor - (end - renderCursor))} cards in ${(performance.now() - t0).toFixed(1)}ms`,
+        const batchMs = performance.now() - t0;
+        recordPerfMetric("renderBatchTimes", batchMs);
+        debugLog(
+          `[perf] renderNextBatch: ${rendered} cards in ${batchMs.toFixed(1)}ms (budget ${RENDER_FRAME_BUDGET_MS}ms)`,
         );
       }
 
@@ -2949,7 +3347,17 @@
         if (records.length === 0) {
           emptyStateEl.classList.remove("isHidden");
           updateHeaderStats(records, options.totalCount ?? records.length);
-          console.debug(
+          updateFilterButtons();
+          if (activeFilterType && filterPopup.classList.contains("show")) {
+            renderFilterPopup();
+          }
+          if (pendingSearchInputAt !== null) {
+            const latency = performance.now() - pendingSearchInputAt;
+            recordPerfMetric("searchLatencies", latency);
+            pendingSearchInputAt = null;
+            debugLog(`[perf] search latency: ${latency.toFixed(1)}ms`);
+          }
+          debugLog(
             `[perf] renderFilteredData: empty state in ${(performance.now() - t0).toFixed(1)}ms`,
           );
           return;
@@ -2957,13 +3365,24 @@
 
         emptyStateEl.classList.add("isHidden");
         updateHeaderStats(records, options.totalCount ?? records.length);
+        updateFilterButtons();
+        if (activeFilterType && filterPopup.classList.contains("show")) {
+          renderFilterPopup();
+        }
         renderNextBatch();
 
         if (!options.partial) {
           setupRenderObserver();
         }
 
-        console.debug(
+        if (pendingSearchInputAt !== null) {
+          const latency = performance.now() - pendingSearchInputAt;
+          recordPerfMetric("searchLatencies", latency);
+          pendingSearchInputAt = null;
+          debugLog(`[perf] search latency: ${latency.toFixed(1)}ms`);
+        }
+
+        debugLog(
           `[perf] renderFilteredData: ${records.length} records prepared in ${(performance.now() - t0).toFixed(1)}ms${
             options.partial ? " (progressive-first-batch)" : ""
           }`,
@@ -3009,7 +3428,6 @@
       let activeFilterType = null;
       let tempSelectionSet = new Set();
       let popupSearchQuery = "";
-      let popupSearchDebounce = null;
 
       const filterPopup = document.getElementById("filterPopup");
       const filterOverlay = document.getElementById("filterOverlay");
@@ -3028,10 +3446,15 @@
         topic: 0,
       };
 
-      const facetPopupCache = {
+      const facetCountsCache = {
         key: "",
-        facetKey: "",
-        values: [],
+        byFacet: {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        },
       };
 
       const filterLabels = {
@@ -3138,61 +3561,91 @@
         return (currentIndex + 1) % cycle.length;
       }
 
-      function makeFacetCacheKey(facetKey) {
-        const searchText = getSearchTextLower();
+      function makeFacetCountsStateKey() {
+        const searchTextLower = getSearchTextLower();
         const scopes = getEffectiveScopes();
-        const parts = [
-          facetKey,
-          searchText,
-          `q:${Number(scopes.scopeQuestion)}`,
-          `o:${Number(scopes.scopeOptions)}`,
-          `e:${Number(scopes.scopeExplanation)}`,
-        ];
-        FACET_KEYS.forEach((k) => {
-          if (k === facetKey) return;
+        const searchKey = getSearchCandidatesKey(searchTextLower, scopes);
+        const filterKey = FACET_KEYS.map((k) => {
           const vals = [...currentFilterSets[k]].sort();
-          parts.push(`${k}:${vals.join("|")}`);
+          return `${k}:${vals.join("|")}`;
+        }).join("::");
+        return `${searchKey}||${filterKey}`;
+      }
+
+      function areSearchCandidatesReadyForCurrentState() {
+        const searchTextLower = getSearchTextLower();
+        if (!searchTextLower) return true;
+        const scopes = getEffectiveScopes();
+        const expectedCandidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
+        return latestSearchCandidatesKey === expectedCandidatesKey;
+      }
+
+      function isFacetDataReadyForCurrentState() {
+        if (!ROWS.length) return false;
+        return areSearchCandidatesReadyForCurrentState();
+      }
+
+      function setFilterPopupControlsDisabled(disabled) {
+        if (filterSortToggle) filterSortToggle.disabled = disabled;
+        if (filterPopupSearch) filterPopupSearch.disabled = disabled;
+        const selectAllBtn = document.getElementById("filterSelectAll");
+        const selectNoneBtn = document.getElementById("filterSelectNone");
+        if (selectAllBtn) selectAllBtn.disabled = disabled;
+        if (selectNoneBtn) selectNoneBtn.disabled = disabled;
+      }
+
+      function computeAllFacetCountsForState() {
+        const stateKey = makeFacetCountsStateKey();
+        const canUseFacetCache = areSearchCandidatesReadyForCurrentState();
+        if (canUseFacetCache && facetCountsCache.key === stateKey) {
+          debugLog(`[perf] facetCountsCache: hit`);
+          return facetCountsCache.byFacet;
+        }
+
+        const t0 = performance.now();
+        const byFacet = {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        };
+
+        FACET_KEYS.forEach((facetKey) => {
+          const baseMatches = getBaseMatches(currentFilterSets, facetKey);
+          const countsMap = new Map();
+
+          for (let i = 0; i < baseMatches.length; i++) {
+            const row = ROWS[baseMatches[i]];
+            const value = row[facetKey] || "";
+            if (!value) continue;
+            countsMap.set(value, (countsMap.get(value) || 0) + 1);
+          }
+
+          const universe = facetValueUniverse[facetKey] || [];
+          byFacet[facetKey] = universe.map((value, idx) => ({
+            idx: idx + 1,
+            value,
+            count: countsMap.get(value) || 0,
+          }));
         });
-        return parts.join("::");
+
+        if (canUseFacetCache) {
+          facetCountsCache.key = stateKey;
+          facetCountsCache.byFacet = byFacet;
+        }
+
+        const facetComputeMs = performance.now() - t0;
+        recordPerfMetric("facetComputeTimes", facetComputeMs);
+        debugLog(
+          `[perf] computeAllFacetCountsForState in ${facetComputeMs.toFixed(1)}ms`,
+        );
+
+        return byFacet;
       }
 
       function computeFacetCounts(facetKey) {
-        const t0 = performance.now();
-        const key = makeFacetCacheKey(facetKey);
-
-        if (
-          facetPopupCache.key === key &&
-          facetPopupCache.facetKey === facetKey
-        ) {
-          console.debug(`[perf] computeFacetCounts: cache hit`);
-          return facetPopupCache.values;
-        }
-
-        const baseMatches = getBaseMatches(currentFilterSets, facetKey);
-        const countsMap = new Map();
-
-        for (let i = 0; i < baseMatches.length; i++) {
-          const row = ROWS[baseMatches[i]];
-          const value = row[facetKey] || "";
-          if (!value) continue;
-          countsMap.set(value, (countsMap.get(value) || 0) + 1);
-        }
-
-        const universe = facetValueUniverse[facetKey] || [];
-        const values = universe.map((value, idx) => ({
-          idx: idx + 1,
-          value,
-          count: countsMap.get(value) || 0,
-        }));
-
-        facetPopupCache.key = key;
-        facetPopupCache.facetKey = facetKey;
-        facetPopupCache.values = values;
-
-        console.debug(
-          `[perf] computeFacetCounts(${facetKey}) in ${(performance.now() - t0).toFixed(1)}ms`,
-        );
-        return values;
+        return computeAllFacetCountsForState()[facetKey] || [];
       }
 
       function sortPopupValues(values) {
@@ -3265,14 +3718,31 @@
 
         filterPopupTitle.textContent = `Filter: ${filterLabels[activeFilterType] || activeFilterType}`;
 
+        if (!isFacetDataReadyForCurrentState()) {
+          setFilterPopupControlsDisabled(true);
+          filterPopupList.innerHTML = `<div class="muted">Loading filter values...</div>`;
+          if (filterPopupTotal) {
+            filterPopupTotal.innerHTML = `<div class="muted">Preparing counts...</div>`;
+          }
+          if (pendingFacetOpenAt !== null) {
+            const facetMs = performance.now() - pendingFacetOpenAt;
+            recordPerfMetric("facetOpenTimes", facetMs);
+            pendingFacetOpenAt = null;
+          }
+          return;
+        }
+
+        setFilterPopupControlsDisabled(false);
         const values = computeFacetCounts(activeFilterType);
-        const nonZeroValues = values.filter((item) => item.count > 0);
+        const displayableValues = values.filter(
+          (item) => item.count > 0 || tempSelectionSet.has(item.value),
+        );
         const query = popupSearchQuery.trim().toLowerCase();
         const filteredValues = query
-          ? nonZeroValues.filter((item) =>
+          ? displayableValues.filter((item) =>
               item.value.toLowerCase().includes(query),
             )
-          : nonZeroValues;
+          : displayableValues;
 
         const selectedValues = filteredValues.filter((item) =>
           tempSelectionSet.has(item.value),
@@ -3287,18 +3757,21 @@
           ...sortedUnselectedValues,
         ];
 
-        updatePopupHeaderCounts(nonZeroValues);
+        updatePopupHeaderCounts(filteredValues);
 
         if (allFacetValues.length === 0) {
           filterPopupList.innerHTML = `<div class="muted">No values found.</div>`;
-          if (filterSortToggle) filterSortToggle.disabled = true;
-          console.debug(
+          if (pendingFacetOpenAt !== null) {
+            const facetMs = performance.now() - pendingFacetOpenAt;
+            recordPerfMetric("facetOpenTimes", facetMs);
+            pendingFacetOpenAt = null;
+            debugLog(`[perf] facet popup open latency: ${facetMs.toFixed(1)}ms`);
+          }
+          debugLog(
             `[perf] renderFilterPopup(empty) in ${(performance.now() - t0).toFixed(1)}ms`,
           );
           return;
         }
-
-        if (filterSortToggle) filterSortToggle.disabled = false;
 
         const fragment = document.createDocumentFragment();
         allFacetValues.forEach((item) => {
@@ -3311,7 +3784,9 @@
           toggle.type = "button";
           toggle.dataset.value = item.value;
           const isActive = tempSelectionSet.has(item.value);
+          const isZeroSelected = isActive && item.count === 0;
           toggle.classList.toggle("active", isActive);
+          toggle.classList.toggle("warningZeroMatch", isZeroSelected);
           toggle.textContent = isActive ? "✓" : "+";
 
           const label = document.createElement("div");
@@ -3320,6 +3795,7 @@
 
           const countEl = document.createElement("div");
           countEl.className = "filterItemCount";
+          countEl.classList.toggle("warningZeroMatch", isZeroSelected);
           countEl.textContent = item.count.toString();
 
           row.appendChild(toggle);
@@ -3331,7 +3807,14 @@
         filterPopupList.innerHTML = "";
         filterPopupList.appendChild(fragment);
 
-        console.debug(
+        if (pendingFacetOpenAt !== null) {
+          const facetMs = performance.now() - pendingFacetOpenAt;
+          recordPerfMetric("facetOpenTimes", facetMs);
+          pendingFacetOpenAt = null;
+          debugLog(`[perf] facet popup open latency: ${facetMs.toFixed(1)}ms`);
+        }
+
+        debugLog(
           `[perf] renderFilterPopup(${allFacetValues.length} values) in ${(performance.now() - t0).toFixed(1)}ms`,
         );
       }
@@ -3339,19 +3822,20 @@
       function updatePopupHeaderCounts(values) {
         if (!filterPopupTotal) return;
 
-        let availableItems = 0;
+        let availableItems = values.length;
         let totalMatches = 0;
         let selectedMatches = 0;
+        let selectedItems = 0;
 
         for (let i = 0; i < values.length; i++) {
           const item = values[i];
           const count = item.count || 0;
           totalMatches += count;
-          if (count > 0) availableItems++;
-          if (tempSelectionSet.has(item.value)) selectedMatches += count;
+          if (tempSelectionSet.has(item.value)) {
+            selectedItems++;
+            selectedMatches += count;
+          }
         }
-
-        const selectedItems = tempSelectionSet.size;
         const filterPercentRaw =
           availableItems > 0
             ? Math.min(100, (selectedItems / availableItems) * 100)
@@ -3419,6 +3903,7 @@
       }
 
       function openFilterPopup(filterType, anchorEl) {
+        pendingFacetOpenAt = performance.now();
         activeFilterType = filterType;
         tempSelectionSet = new Set(currentFilters[filterType]);
         popupSearchQuery = "";
@@ -3459,12 +3944,38 @@
       }
 
       function updateFilterButtons() {
+        const allFacetCounts = computeAllFacetCountsForState();
+        const countMapByFacet = {
+          exam: new Map(
+            (allFacetCounts.exam || []).map((item) => [item.value, item.count || 0]),
+          ),
+          year: new Map(
+            (allFacetCounts.year || []).map((item) => [item.value, item.count || 0]),
+          ),
+          subject: new Map(
+            (allFacetCounts.subject || []).map((item) => [item.value, item.count || 0]),
+          ),
+          theme: new Map(
+            (allFacetCounts.theme || []).map((item) => [item.value, item.count || 0]),
+          ),
+          topic: new Map(
+            (allFacetCounts.topic || []).map((item) => [item.value, item.count || 0]),
+          ),
+        };
+
         document.querySelectorAll(".filterButton").forEach((btn) => {
           const type = btn.dataset.filter;
-          const count = currentFilters[type].length;
+          const selectedValues = currentFilters[type] || [];
+          const count = selectedValues.length;
           const countEl = btn.querySelector(`[data-count="${type}"]`);
           if (countEl) countEl.textContent = count.toString();
           btn.classList.toggle("hasSelection", count > 0);
+
+          const countMap = countMapByFacet[type] || new Map();
+          const hasZeroMatchSelection =
+            count > 0 &&
+            selectedValues.some((value) => (countMap.get(value) || 0) === 0);
+          btn.classList.toggle("hasZeroMatchSelection", hasZeroMatchSelection);
         });
       }
 
@@ -3490,22 +4001,24 @@
       document
         .getElementById("filterSelectAll")
         .addEventListener("click", () => {
-          if (!activeFilterType) return;
+          if (!activeFilterType || !isFacetDataReadyForCurrentState()) return;
           const values = computeFacetCounts(activeFilterType);
-          const nonZeroValues = values.filter((item) => item.count > 0);
           const query = popupSearchQuery.trim().toLowerCase();
-          const filteredValues = query
-            ? nonZeroValues.filter((item) =>
-                item.value.toLowerCase().includes(query),
-              )
-            : nonZeroValues;
-          tempSelectionSet = new Set(filteredValues.map((item) => item.value));
+          const visiblePositiveValues = values.filter(
+            (item) =>
+              item.count > 0 &&
+              (!query || item.value.toLowerCase().includes(query)),
+          );
+          tempSelectionSet = new Set(
+            visiblePositiveValues.map((item) => item.value),
+          );
           renderFilterPopup();
         });
 
       document
         .getElementById("filterSelectNone")
         .addEventListener("click", () => {
+          if (!isFacetDataReadyForCurrentState()) return;
           tempSelectionSet = new Set();
           renderFilterPopup();
         });
@@ -3604,8 +4117,14 @@
 
       function refreshVisibleHighlights() {
         const searchTextLower = getSearchTextLower();
-        document.querySelectorAll("#app [data-search-raw]").forEach((el) => {
+        document.querySelectorAll("#app [data-qtext]").forEach((el) => {
           renderSearchText(el, el.dataset.searchRaw || "", searchTextLower);
+        });
+        document.querySelectorAll("#app .card").forEach((card) => {
+          if (card.dataset.deferredHighlightDone === "1") {
+            card.dataset.deferredHighlightDone = "";
+            applyDeferredCardHighlights(card, searchTextLower);
+          }
         });
       }
 
@@ -3658,6 +4177,7 @@
       document.getElementById("clientSearch").addEventListener(
         "input",
         debounce(() => {
+          pendingSearchInputAt = performance.now();
           scheduleFilteredUpdate();
         }, 200),
       );
@@ -3812,27 +4332,34 @@
         const t0 = performance.now();
         DATA = (records || []).map(normalizeRecord);
         ROWS = buildSearchRows(DATA);
+        ALL_ROW_INDICES = ROWS.map((_, idx) => idx);
         buildFacetValueUniverse();
 
         // Clear facet cache
-        facetPopupCache.key = "";
-        facetPopupCache.facetKey = "";
-        facetPopupCache.values = [];
+        facetCountsCache.key = "";
+        facetCountsCache.byFacet = {
+          exam: [],
+          year: [],
+          subject: [],
+          theme: [],
+          topic: [],
+        };
 
         rebuildFilterSets();
         updateFilterButtons();
         invalidateSearchCache("records-updated");
         initSearchWorker(ROWS);
-        latestSearchCandidateIndices = ROWS.map((_, idx) => idx);
+        latestSearchCandidateIndices = ALL_ROW_INDICES;
+        latestSearchCandidatesKey = null;
         latestFilteredRecords = ROWS.map((row) => row.record);
         scheduleFilteredUpdate();
 
-        console.debug(
+        debugLog(
           `[perf] onRecords -> ${DATA.length} rows processed in ${(performance.now() - t0).toFixed(1)}ms`,
         );
       });
 
-      console.log("✅ Optimized MCQ Practice App Loaded");
+      debugLog("✅ Optimized MCQ Practice App Loaded");
     </script>
   </body>
 </html>
