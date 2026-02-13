@@ -3760,55 +3760,93 @@
         let w = String(word || "").toLowerCase();
         w = w.replace(/(?:ies|es|s)$/, "");
         w = w.replace(/(?:ing|ed)$/, "");
+        // Avoid returning an empty stem; fallback to normalized source token.
+        if (!w || w.length < 2) {
+          const fallback = String(word || "").toLowerCase();
+          return fallback.length >= 2 ? fallback : "";
+        }
         return w;
       }
 
       function soundexForHighlight(word) {
-        const cleaned = String(word || "").toUpperCase().replace(/[^A-Z]/g, "");
+        // Standard Soundex algorithm for phonetic matching.
+        const cleaned = String(word || "")
+          .toUpperCase()
+          .replace(/[^A-Z]/g, "");
+
         if (!cleaned) return "";
+
         const first = cleaned[0];
+
+        // Soundex character mapping (vowels A,E,I,O,U and H,W,Y are intentionally unmapped).
         const map = {
-          B: "1", F: "1", P: "1", V: "1",
-          C: "2", G: "2", J: "2", K: "2", Q: "2", S: "2", X: "2", Z: "2",
-          D: "3", T: "3",
-          L: "4",
-          M: "5", N: "5",
-          R: "6",
+          B: "1", F: "1", P: "1", V: "1", // Labial consonants
+          C: "2", G: "2", J: "2", K: "2", Q: "2", S: "2", X: "2", Z: "2", // Sibilants
+          D: "3", T: "3", // Dental consonants
+          L: "4", // Lateral consonant
+          M: "5", N: "5", // Nasal consonants
+          R: "6", // Approximant consonant
+          // Unmapped: A, E, I, O, U, H, W, Y
         };
+
         let out = first;
         let prev = map[first] || "";
+
         for (let i = 1; i < cleaned.length && out.length < 4; i++) {
-          const code = map[cleaned[i]] || "";
-          if (!code || code === prev) {
-            prev = code;
-            continue;
-          }
+          const char = cleaned[i];
+          const code = map[char];
+
+          // Skip unmapped characters (vowels and semivowels).
+          if (!code) continue;
+
+          // Skip consecutive duplicate classes.
+          if (code === prev) continue;
+
           out += code;
           prev = code;
         }
+
+        // Pad with zeros to get 4-character Soundex code.
         return (out + "000").slice(0, 4);
       }
 
       function boundedLevenshteinForHighlight(a, b, maxDistance = 2) {
-        if (a === b) return 0;
-        if (!a || !b) return Math.max(a.length, b.length);
-        if (Math.abs(a.length - b.length) > maxDistance) return maxDistance + 1;
-        const prev = new Uint16Array(b.length + 1);
-        const curr = new Uint16Array(b.length + 1);
-        for (let j = 0; j <= b.length; j++) prev[j] = j;
-        for (let i = 1; i <= a.length; i++) {
+        const aStr = String(a || "");
+        const bStr = String(b || "");
+
+        if (aStr === bStr) return 0;
+        if (!aStr.length || !bStr.length) {
+          return Math.max(aStr.length, bStr.length);
+        }
+
+        maxDistance = Math.max(1, Math.floor(maxDistance || 2));
+        if (Math.abs(aStr.length - bStr.length) > maxDistance)
+          return maxDistance + 1;
+
+        const prev = new Uint16Array(bStr.length + 1);
+        const curr = new Uint16Array(bStr.length + 1);
+
+        for (let j = 0; j <= bStr.length; j++) prev[j] = j;
+
+        for (let i = 1; i <= aStr.length; i++) {
           curr[0] = i;
           let minInRow = curr[0];
-          for (let j = 1; j <= b.length; j++) {
-            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-            const val = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+          for (let j = 1; j <= bStr.length; j++) {
+            const cost = aStr[i - 1] === bStr[j - 1] ? 0 : 1;
+            const val = Math.min(
+              prev[j] + 1,
+              curr[j - 1] + 1,
+              prev[j - 1] + cost,
+            );
             curr[j] = val;
             if (val < minInRow) minInRow = val;
           }
           if (minInRow > maxDistance) return maxDistance + 1;
           prev.set(curr);
         }
-        return prev[b.length];
+
+        if (typeof prev[bStr.length] !== "number") return maxDistance + 1;
+        return prev[bStr.length];
       }
 
       function rebuildHighlightLexicon() {
@@ -3852,7 +3890,7 @@
           const stemToken = stemForHighlight(token);
           const sndToken = soundexForHighlight(token);
           strict.add(token);
-          strict.add(stemToken);
+          if (stemToken && stemToken.length > 1) strict.add(stemToken);
 
           let fuzzyAdded = 0;
           let phoneticAdded = 0;
@@ -3959,12 +3997,17 @@
         let match;
         regex.lastIndex = 0;
 
-        while ((match = regex.exec(raw)) !== null) {
-          result += escapeHtml(raw.slice(lastIndex, match.index));
-          result += `<mark class="searchHit">${escapeHtml(match[0])}</mark>`;
-          lastIndex = regex.lastIndex;
+        try {
+          while ((match = regex.exec(raw)) !== null) {
+            result += escapeHtml(raw.slice(lastIndex, match.index));
+            result += `<mark class="searchHit">${escapeHtml(match[0])}</mark>`;
+            lastIndex = regex.lastIndex;
+          }
+          result += escapeHtml(raw.slice(lastIndex));
+        } finally {
+          // Reset global regex state even if loop exits with an exception.
+          regex.lastIndex = 0;
         }
-        result += escapeHtml(raw.slice(lastIndex));
         return result;
       }
 
