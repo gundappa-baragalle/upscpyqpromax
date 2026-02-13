@@ -860,18 +860,18 @@
         display: flex;
         flex-direction: column;
         flex: 1;
-        max-width: 1200px;
-        margin: 0 auto;
         padding: 24px;
         width: 100%;
       }
 
       .container {
-        max-width: 1000px;
+        max-width: 900px;
         margin: 0 auto;
         padding: 0;
         width: 100%;
         flex: 1;
+        display: flex;
+        flex-direction: column;
       }
 
       #app {
@@ -940,7 +940,7 @@
       }
 
       .container {
-        max-width: 1000px;
+        max-width: 900px;
         margin: 0 auto;
         padding: 0;
         width: 100%;
@@ -955,9 +955,10 @@
         );
         backdrop-filter: blur(16px) saturate(200%);
         border: 1px solid rgba(48, 54, 61, 0.8);
-        border-radius: 14px;
-        padding: 32px 36px;
-        margin-bottom: 24px;
+        border-radius: 16px;
+        padding: 28px 32px;
+        margin-bottom: 20px;
+        max-width: 100%;
         box-shadow:
           0 8px 16px rgba(0, 0, 0, 0.2),
           0 2px 4px rgba(0, 0, 0, 0.1),
@@ -969,6 +970,43 @@
         animation: cardEntrance 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
       }
 
+
+      @media (min-width: 900px) {
+        .card {
+          padding: 32px 36px;
+          margin-bottom: 24px;
+          border-radius: 16px;
+        }
+
+        .qtext {
+          font-size: 17px;
+          line-height: 1.85;
+          margin: 18px 0 24px 0;
+        }
+
+        .opt .opttext,
+        .opttext {
+          font-size: 15px;
+          line-height: 1.65;
+        }
+
+        .opt {
+          padding: 18px 20px;
+          min-height: 60px;
+          gap: 14px;
+        }
+
+        .opt .letter {
+          min-width: 40px;
+          width: 40px;
+          height: 40px;
+          font-size: 15px;
+        }
+
+        .opt:hover {
+          transform: translateX(8px) translateY(-2px);
+        }
+      }
       @keyframes cardEntrance {
         from {
           opacity: 0;
@@ -1053,19 +1091,21 @@
 
       .meta {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
-        margin-bottom: 12px;
+        margin-bottom: 14px;
+        align-items: center;
       }
 
       .qtext {
-        font-size: clamp(16px, 2vw, 19px);
-        line-height: 1.8;
-        margin: 20px 0 24px 0;
+        font-size: clamp(15px, 1.8vw, 17px);
+        line-height: 1.85;
+        margin: 16px 0 20px 0;
         font-weight: 500;
-        letter-spacing: -0.013em;
+        letter-spacing: -0.011em;
         color: var(--text-primary);
         word-break: break-word;
+        max-width: 100%;
       }
 
       .pill.copyableMeta {
@@ -1084,18 +1124,25 @@
       .opts {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 10px;
-        margin: 12px 0;
+        gap: 12px;
+        margin: 18px 0 8px 0;
+      }
+
+      @media (min-width: 900px) {
+        .opts {
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
       }
 
       .opt {
         position: relative;
         display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 18px 20px;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 16px 18px;
         border: 1.5px solid rgba(48, 54, 61, 0.5);
-        border-radius: 11px;
+        border-radius: 12px;
         background: linear-gradient(
           135deg,
           rgba(28, 33, 40, 0.8) 0%,
@@ -1105,6 +1152,7 @@
         transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
         overflow: hidden;
         backdrop-filter: blur(8px);
+        min-height: 56px;
       }
 
       .opt::before {
@@ -1146,9 +1194,10 @@
       }
 
       .opt .letter {
-        min-width: 40px;
-        height: 40px;
-        border-radius: 9px;
+        min-width: 36px;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
         background: linear-gradient(
           135deg,
           rgba(48, 54, 61, 0.8),
@@ -1159,12 +1208,13 @@
         align-items: center;
         justify-content: center;
         font-weight: 700;
-        font-size: 15px;
+        font-size: 14px;
         color: var(--text-secondary);
         flex-shrink: 0;
         position: relative;
         z-index: 1;
         transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        margin-top: 2px;
       }
 
       .opt:hover .letter {
@@ -1177,9 +1227,11 @@
 
       .opt .opttext {
         flex: 1;
-        font-size: clamp(13px, 1.4vw, 15px);
+        font-size: clamp(13px, 1.3vw, 15px);
+        line-height: 1.6;
         position: relative;
         z-index: 1;
+        word-break: break-word;
       }
 
       .opt.correct {
@@ -1705,23 +1757,78 @@
         .layout {
           padding: 20px;
         }
+
+        .container {
+          max-width: 800px;
+        }
+
+        .card {
+          padding: 24px 28px;
+          margin-bottom: 18px;
+        }
+
         .opts {
           grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .opt {
+          padding: 14px 16px;
+          min-height: 52px;
+          gap: 12px;
+        }
+
+        .opt .letter {
+          min-width: 36px;
+          width: 36px;
+          height: 36px;
+          font-size: 14px;
         }
       }
 
       @media (max-width: 640px) {
         .layout {
-          padding: 16px;
+          padding: 12px;
+        }
+        .container {
+          max-width: 100%;
         }
         .card {
           padding: 16px;
-          border-radius: 16px;
+          border-radius: 14px;
           margin-bottom: 12px;
+        }
+        .qtext {
+          font-size: 15px;
+          line-height: 1.75;
+          margin: 12px 0 16px 0;
+        }
+        .meta {
+          margin-bottom: 10px;
+          gap: 6px;
+        }
+        .opts {
+          grid-template-columns: 1fr;
+          gap: 10px;
+          margin: 14px 0 8px 0;
         }
         .opt {
           padding: 12px;
+          min-height: 48px;
           gap: 10px;
+          align-items: flex-start;
+        }
+        .opt .letter {
+          min-width: 32px;
+          width: 32px;
+          height: 32px;
+          font-size: 12px;
+          margin-top: 2px;
+        }
+        .opttext,
+        .opt .opttext {
+          font-size: 13px;
+          line-height: 1.6;
         }
         .filterButton,
         .smallbtn {
@@ -1988,8 +2095,34 @@
           padding: 10px 12px;
         }
         .card {
-          padding: 12px;
-          border-radius: 10px;
+          padding: 14px;
+          margin-bottom: 10px;
+          border-radius: 12px;
+        }
+        .qtext {
+          font-size: 14px;
+          line-height: 1.7;
+          margin: 10px 0 14px 0;
+        }
+        .opts {
+          gap: 8px;
+          margin: 12px 0 6px 0;
+        }
+        .opt {
+          padding: 10px;
+          min-height: 44px;
+          gap: 8px;
+        }
+        .opt .letter {
+          min-width: 28px;
+          width: 28px;
+          height: 28px;
+          font-size: 11px;
+        }
+        .opttext,
+        .opt .opttext {
+          font-size: 12px;
+          line-height: 1.5;
         }
       }
 
