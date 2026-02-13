@@ -1806,6 +1806,10 @@
       }
 
       @media (max-width: 768px) {
+        .app-container {
+          flex-direction: column;
+          overflow: visible;
+        }
         .activity-bar {
           position: static;
           width: 100%;
@@ -1817,7 +1821,7 @@
           border-right: none;
           border-bottom: 1px solid rgba(48, 54, 61, 0.4);
           padding: 8px;
-          order: -1;
+          order: 0;
         }
         .activity-bar-item {
           flex-shrink: 0;
@@ -1827,18 +1831,19 @@
         }
         .sidebar-wrapper {
           position: static;
-          width: 100%;
+          width: 100% !important;
           height: auto;
           border-right: none;
           border-bottom: 1px solid rgba(48, 54, 61, 0.4);
-          max-height: 180px;
-          flex-direction: row;
-          overflow-x: auto;
-          overflow-y: hidden;
-          white-space: nowrap;
+          max-height: 40vh;
+          flex-direction: column;
+          overflow-x: hidden;
+          overflow-y: auto;
+          white-space: normal;
+          order: 1;
         }
         .sidebar-wrapper.collapsed {
-          width: 100%;
+          width: 100% !important;
           max-height: 0;
           overflow: hidden;
         }
@@ -1857,17 +1862,17 @@
           letter-spacing: 0.3px;
         }
         .sidebar-content {
-          flex-direction: row;
+          flex-direction: column;
           padding: 12px;
           gap: 12px;
-          overflow-x: auto;
-          overflow-y: hidden;
-          white-space: nowrap;
+          overflow-x: hidden;
+          overflow-y: auto;
+          white-space: normal;
         }
         .sidebarTopicItem,
         .sidebarProgressItem,
         .sidebarPanelList > * {
-          flex-shrink: 0;
+          flex-shrink: 1;
           white-space: normal;
         }
         .main-content {
@@ -1878,6 +1883,7 @@
           top: auto;
           right: auto;
           bottom: auto;
+          order: 2;
         }
         .main-content.expanded {
           width: 100%;
@@ -1950,7 +1956,7 @@
           height: 36px;
         }
         .sidebar-wrapper {
-          max-height: 140px;
+          max-height: 34vh;
         }
         .sidebar-header {
           padding: 6px 10px;
