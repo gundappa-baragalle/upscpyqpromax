@@ -906,6 +906,83 @@
         flex-direction: column;
       }
 
+      .appShell {
+        position: relative;
+        min-height: 220px;
+      }
+
+      .appLoadingOverlay {
+        position: absolute;
+        inset: 0;
+        border: 1px solid rgba(88, 166, 255, 0.22);
+        border-radius: 14px;
+        background: rgba(13, 17, 23, 0.84);
+        backdrop-filter: blur(8px);
+        z-index: 5;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+
+      .appLoadingOverlay.show {
+        display: flex;
+      }
+
+      .loadingCard {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: rgba(22, 27, 34, 0.92);
+        border: 1px solid rgba(88, 166, 255, 0.35);
+        color: #dbeafe;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .loadingStatus {
+        margin-top: 10px;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        width: fit-content;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(88, 166, 255, 0.45);
+        background: rgba(47, 129, 247, 0.14);
+        color: #dbeafe;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .loadingStatus.show {
+        display: inline-flex;
+      }
+
+      .spinner,
+      .spinnerRing {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid rgba(201, 209, 217, 0.25);
+        border-top-color: #58a6ff;
+        animation: spin 0.8s linear infinite;
+        flex-shrink: 0;
+      }
+
+      .spinner {
+        width: 22px;
+        height: 22px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       .smallbtn {
         display: inline-flex;
         align-items: center;
@@ -1461,6 +1538,23 @@
         top: 50%;
         transform: translateY(-50%);
         color: var(--text-muted);
+        transition: opacity var(--transition-fast);
+      }
+
+      .searchSpinner {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: none;
+      }
+
+      .searchWrapper.searching .searchIcon {
+        opacity: 0;
+      }
+
+      .searchWrapper.searching .searchSpinner {
+        display: inline-flex;
       }
 
       .searchClear {
@@ -2234,6 +2328,7 @@
                 d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"
               ></path></svg
           ></span>
+          <span class="searchSpinner" aria-hidden="true"><span class="spinnerRing"></span></span>
           <input
             id="clientSearch"
             type="text"
@@ -2313,6 +2408,10 @@
             </div>
           </div>
         </div>
+      </div>
+      <div class="loadingStatus" id="loadingStatus" role="status" aria-live="polite">
+        <span class="spinnerRing" aria-hidden="true"></span>
+        <span id="loadingStatusText">Loading questions...</span>
       </div>
     </header>
 
@@ -2476,7 +2575,15 @@
       <main class="main-content" id="mainContent">
         <div class="layout">
           <div class="container">
-            <div id="app"></div>
+            <div class="appShell">
+              <div class="appLoadingOverlay" id="appLoadingOverlay" aria-hidden="true">
+                <div class="loadingCard">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span id="appLoadingText">Loading questions...</span>
+                </div>
+              </div>
+              <div id="app"></div>
+            </div>
           </div>
         </div>
       </main>
@@ -3993,6 +4100,53 @@
       let searchWorkerReady = false;
       let lastSearchRequestId = 0;
       let pendingSearchInputAt = null;
+      const loadingStatusEl = document.getElementById("loadingStatus");
+      const loadingStatusTextEl = document.getElementById("loadingStatusText");
+      const appLoadingOverlayEl = document.getElementById("appLoadingOverlay");
+      const appLoadingTextEl = document.getElementById("appLoadingText");
+      const searchWrapperEl = document.querySelector(".searchWrapper");
+      const activeLoadingReasons = new Map();
+
+      function syncLoadingUI() {
+        const entries = Array.from(activeLoadingReasons.values());
+        const top = entries[entries.length - 1];
+        const isLoading = entries.length > 0;
+
+        if (loadingStatusEl) {
+          loadingStatusEl.classList.toggle("show", isLoading);
+        }
+        if (loadingStatusTextEl && top?.message) {
+          loadingStatusTextEl.textContent = top.message;
+        }
+        if (appLoadingOverlayEl) {
+          appLoadingOverlayEl.classList.toggle("show", isLoading);
+          appLoadingOverlayEl.setAttribute("aria-hidden", String(!isLoading));
+        }
+        if (appLoadingTextEl && top?.message) {
+          appLoadingTextEl.textContent = top.message;
+        }
+        if (searchWrapperEl) {
+          const isSearching = activeLoadingReasons.has("search");
+          searchWrapperEl.classList.toggle("searching", isSearching);
+        }
+      }
+
+      function setLoadingState(reason, isLoading, message = "Loading...") {
+        if (!reason) return;
+        if (isLoading) {
+          activeLoadingReasons.set(reason, { message });
+        } else {
+          activeLoadingReasons.delete(reason);
+        }
+        syncLoadingUI();
+      }
+
+      function clearTransientLoadingStates() {
+        ["pipeline", "search", "filters", "data-refresh", "app-init"].forEach(
+          (key) => activeLoadingReasons.delete(key),
+        );
+        syncLoadingUI();
+      }
       let pendingFacetOpenAt = null;
       let latestSearchCandidateIndices = [];
       let latestSearchCandidatesKey = null;
@@ -4082,7 +4236,7 @@
           if (payload.type === "INIT_DONE") {
             searchWorkerReady = true;
 
-            scheduleFilteredUpdate();
+            scheduleFilteredUpdate({ reasonKey: "app-init", message: "Loading questions..." });
             return;
           }
 
@@ -5165,6 +5319,7 @@
           // ranking engine. Wait for the index to be ready so users see one
           // deterministic result-set/order per query.
           if (searchTokens.length > 0) {
+            setLoadingState("search", true, "Preparing search index...");
             const app = document.getElementById("app");
             if (app) {
               app.innerHTML = `
@@ -5241,6 +5396,11 @@
         }
 
         const requestId = ++lastSearchRequestId;
+        const loadingMessage = searchTokens.length
+          ? "Searching questions..."
+          : "Applying filters...";
+        const loadingReasonKey = searchTokens.length ? "search" : "filters";
+        setLoadingState(loadingReasonKey, true, loadingMessage);
         searchWorker._activeCacheKey = cacheKey;
         searchWorker._activeCandidatesKey = candidatesKey;
         searchWorker._activeFacetStateKey = facetStateKey;
@@ -5652,6 +5812,7 @@
           if (pendingSearchInputAt !== null) {
             pendingSearchInputAt = null;
           }
+          clearTransientLoadingStates();
           return;
         }
 
@@ -5671,11 +5832,18 @@
         if (pendingSearchInputAt !== null) {
           pendingSearchInputAt = null;
         }
+        clearTransientLoadingStates();
       }
 
       let pendingFilterUpdate = null;
 
-      function scheduleFilteredUpdate() {
+      function scheduleFilteredUpdate(context = {}) {
+        const normalized =
+          typeof context === "string" ? { message: context } : context;
+        const reasonKey = normalized.reasonKey || "pipeline";
+        const message = normalized.message || "Updating questions...";
+        setLoadingState(reasonKey, true, message);
+
         if (pendingFilterUpdate) {
           cancelAnimationFrame(pendingFilterUpdate);
         }
@@ -6332,7 +6500,7 @@
               currentFilters[type] = [...selection];
               rebuildFilterSets();
               invalidateSearchCache("filters-changed");
-              scheduleFilteredUpdate();
+              scheduleFilteredUpdate({ reasonKey: "filters", message: "Applying filters..." });
             }
           }, 0);
         }
@@ -6541,7 +6709,7 @@
           saveSearchSettings();
           updateSearchScopeUI();
           invalidateSearchCache("scope-changed");
-          scheduleFilteredUpdate();
+          scheduleFilteredUpdate({ reasonKey: "search", message: "Updating search scope..." });
         });
       });
 
@@ -6552,7 +6720,7 @@
         saveSearchSettings();
         updateSearchScopeUI();
         invalidateSearchCache("scope-changed");
-        scheduleFilteredUpdate();
+        scheduleFilteredUpdate({ reasonKey: "search", message: "Updating search scope..." });
       });
 
       document.getElementById("scopeNone")?.addEventListener("click", () => {
@@ -6562,7 +6730,7 @@
         saveSearchSettings();
         updateSearchScopeUI();
         invalidateSearchCache("scope-changed");
-        scheduleFilteredUpdate();
+        scheduleFilteredUpdate({ reasonKey: "search", message: "Updating search scope..." });
       });
 
       document
@@ -6576,7 +6744,7 @@
           "input",
           debounce(() => {
             pendingSearchInputAt = performance.now();
-            scheduleFilteredUpdate();
+            scheduleFilteredUpdate({ reasonKey: "search", message: "Searching questions..." });
           }, 100),
         );
       }
@@ -6604,7 +6772,7 @@
             )
           ) {
             stateManager.clear();
-            scheduleFilteredUpdate();
+            scheduleFilteredUpdate({ reasonKey: "pipeline", message: "Refreshing progress..." });
           }
         });
       }
@@ -6872,7 +7040,7 @@
               closeSearchScopePopup();
             } else {
               document.getElementById("clientSearch").value = "";
-              scheduleFilteredUpdate();
+              scheduleFilteredUpdate({ reasonKey: "search", message: "Searching questions..." });
             }
           }
           return;
@@ -6962,6 +7130,7 @@
 
       grist.onRecords((records) => {
         const t0 = performance.now();
+        setLoadingState("data-refresh", true, "Refreshing questions...");
 
         // Preserve current search and filter state
         const currentSearchText = getSearchTextLower();
@@ -6998,7 +7167,7 @@
           invalidateSearchCache("records-updated-preserving-search");
           updateFilterButtons();
           updateSidebarPanels();
-          scheduleFilteredUpdate();
+          scheduleFilteredUpdate({ reasonKey: "data-refresh", message: "Refreshing questions..." });
         } else {
           // No active search/filter, just show all records
           invalidateSearchCache("records-updated");
@@ -7009,9 +7178,11 @@
           latestFilteredRecords = ROWS.map((row) => row.record);
           updateFilterButtons();
           updateSidebarPanels();
-          scheduleFilteredUpdate();
+          scheduleFilteredUpdate({ reasonKey: "data-refresh", message: "Refreshing questions..." });
         }
       });
+
+      setLoadingState("app-init", true, "Loading questions...");
 
       // Fallback initialization if not in Grist
       window.addEventListener("load", () => {
@@ -7027,6 +7198,7 @@
             updateFilterButtons();
             updateHeaderStats([], 0);
             updateSidebarPanels();
+            clearTransientLoadingStates();
           }
         }, 1000);
       });
