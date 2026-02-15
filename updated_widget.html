@@ -3839,8 +3839,13 @@
                   }
                 }
              }
-             // Sort candidates by score descending
-             candidates.sort((a, b) => scores[b] - scores[a]);
+             // Sort candidates by score descending with deterministic tie-breaker.
+             // Stable ordering removes UI jumps when scores are equal.
+             candidates.sort((a, b) => {
+               const scoreDelta = scores[b] - scores[a];
+               if (scoreDelta !== 0) return scoreDelta;
+               return a - b;
+             });
           }
 
           const firstBatch = [];
@@ -3976,6 +3981,14 @@
         }
       }
 
+      function normalizeWorkerIndices(indices) {
+        return [...new Set(indices || [])];
+      }
+
+      function recordsFromIndices(indices) {
+        return indices.map((idx) => ROWS[idx].record);
+      }
+
       function initSearchWorker(rows) {
         if (searchWorker) {
           searchWorkerReady = false;
@@ -4003,11 +4016,8 @@
           if (payload.requestId !== lastSearchRequestId) return;
 
           if (payload.type === "FIRST_BATCH") {
-            // Deduplicate indices from worker before converting to records
-            const uniqueIndices = [...new Set(payload.indices || [])];
-            const firstBatchRecords = uniqueIndices.map(
-              (idx) => ROWS[idx].record,
-            );
+            const uniqueIndices = normalizeWorkerIndices(payload.indices);
+            const firstBatchRecords = recordsFromIndices(uniqueIndices);
             latestSearchCandidateIndices = payload.candidates || [];
             latestSearchCandidatesKey =
               searchWorker._activeCandidatesKey || null;
@@ -4020,9 +4030,8 @@
           }
 
           if (payload.type === "SEARCH_DONE") {
-            // Deduplicate indices from worker before converting to records
-            const uniqueIndices = [...new Set(payload.indices || [])];
-            const allRecords = uniqueIndices.map((idx) => ROWS[idx].record);
+            const uniqueIndices = normalizeWorkerIndices(payload.indices);
+            const allRecords = recordsFromIndices(uniqueIndices);
             latestSearchCandidateIndices = payload.candidates || [];
             latestSearchCandidatesKey =
               searchWorker._activeCandidatesKey || null;
@@ -5072,12 +5081,33 @@
 
       function runSearchPipeline() {
         const searchTextLower = getSearchTextLower();
+        const searchTokens = tokenizeSearchText(searchTextLower);
         const scopes = getEffectiveScopes();
         const candidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
         const filtersPayload = getFiltersPayload();
         const facetStateKey = makeFacetCountsStateKey();
 
         if (!searchWorkerReady || !searchWorker) {
+          // Industry practice: avoid serving interim results from a different
+          // ranking engine. Wait for the index to be ready so users see one
+          // deterministic result-set/order per query.
+          if (searchTokens.length > 0) {
+            const app = document.getElementById("app");
+            if (app) {
+              app.innerHTML = `
+                <div class="emptyState" role="status" aria-live="polite">
+                  <div class="spinner" style="margin-bottom: 10px;"></div>
+                  <h3>Preparing search index…</h3>
+                  <p class="muted">Fetching stable ranked results for \"${escapeHtml(searchTextLower)}\"</p>
+                </div>
+              `;
+            }
+            updateHeaderStats([], 0);
+            updateFilterButtons();
+            updateSidebarPanels();
+            return;
+          }
+
           const fallbackCandidates = buildFallbackSearchCandidates(
             searchTextLower,
             scopes,
@@ -5128,8 +5158,8 @@
             latestFacetsStateKey = null;
           }
 
-          const cachedIndices = cached.indices || [];
-          latestFilteredRecords = cachedIndices.map((idx) => ROWS[idx].record);
+          const cachedIndices = normalizeWorkerIndices(cached.indices);
+          latestFilteredRecords = recordsFromIndices(cachedIndices);
           renderFilteredData(latestFilteredRecords, {
             partial: false,
             totalCount: latestFilteredRecords.length,
@@ -5144,7 +5174,7 @@
         searchWorker.postMessage({
           type: "SEARCH",
           requestId,
-          tokens: tokenizeSearchText(searchTextLower),
+          tokens: searchTokens,
           scopes,
           filters: filtersPayload,
         });
