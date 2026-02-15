@@ -2559,6 +2559,7 @@
 
       let searchWorker = null;
       let searchWorkerReady = false;
+      let searchWorkerUnavailable = false;
       let lastSearchRequestId = 0;
       let pendingSearchInputAt = null;
       let pendingFacetOpenAt = null;
@@ -2619,6 +2620,8 @@
       }
 
       function initSearchWorker(rows) {
+        if (searchWorkerUnavailable) return;
+
         if (searchWorker) {
           searchWorker.terminate();
           searchWorker = null;
@@ -2628,7 +2631,18 @@
           type: "application/javascript",
         });
         const workerUrl = URL.createObjectURL(blob);
-        searchWorker = new Worker(workerUrl);
+        try {
+          searchWorker = new Worker(workerUrl);
+        } catch (error) {
+          searchWorkerUnavailable = true;
+          searchWorker = null;
+          searchWorkerReady = false;
+          console.warn(
+            "Search worker unavailable; using synchronous fallback search.",
+            error,
+          );
+          return;
+        }
         URL.revokeObjectURL(workerUrl);
 
         searchWorkerReady = false;
@@ -2935,7 +2949,7 @@
         const scopes = getEffectiveScopes();
         const candidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
 
-        if (!searchWorkerReady || !searchWorker) {
+        if (searchWorkerUnavailable || !searchWorker) {
           const fallbackCandidates = buildFallbackSearchCandidates(
             searchTextLower,
             scopes,
@@ -2954,6 +2968,12 @@
             partial: false,
             totalCount: fallbackFiltered.length,
           });
+          return;
+        }
+
+        if (!searchWorkerReady) {
+          // Avoid rendering temporary fallback results while the worker is still
+          // indexing. Waiting for INIT_DONE keeps result counts/order consistent.
           return;
         }
 

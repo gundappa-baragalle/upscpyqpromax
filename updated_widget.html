@@ -3216,8 +3216,13 @@
                     }
                 }
              }
-             // Sort candidates by score descending
-             candidates.sort((a, b) => scores[b] - scores[a]);
+             // Sort candidates by score descending with deterministic tie-break.
+             // This keeps ranking stable between partial/full renders and reruns.
+             candidates.sort((a, b) => {
+               const scoreDelta = scores[b] - scores[a];
+               if (Math.abs(scoreDelta) > 1e-9) return scoreDelta;
+               return a - b;
+             });
           }
 
           const firstBatch = [];
@@ -3290,6 +3295,7 @@
 
       let searchWorker = null;
       let searchWorkerReady = false;
+      let searchWorkerUnavailable = false;
       let lastSearchRequestId = 0;
       let pendingSearchInputAt = null;
       let pendingFacetOpenAt = null;
@@ -3351,6 +3357,8 @@
       }
 
       function initSearchWorker(rows) {
+        if (searchWorkerUnavailable) return;
+
         if (searchWorker) {
           searchWorkerReady = false;
           searchWorker.postMessage({ type: "INIT", rows });
@@ -3361,7 +3369,18 @@
           type: "application/javascript",
         });
         const workerUrl = URL.createObjectURL(blob);
-        searchWorker = new Worker(workerUrl);
+        try {
+          searchWorker = new Worker(workerUrl);
+        } catch (error) {
+          searchWorkerUnavailable = true;
+          searchWorker = null;
+          searchWorkerReady = false;
+          console.warn(
+            "Search worker unavailable; using synchronous fallback search.",
+            error,
+          );
+          return;
+        }
         URL.revokeObjectURL(workerUrl);
 
         searchWorkerReady = false;
@@ -3703,7 +3722,7 @@
         const scopes = getEffectiveScopes();
         const candidatesKey = getSearchCandidatesKey(searchTextLower, scopes);
 
-        if (!searchWorkerReady || !searchWorker) {
+        if (searchWorkerUnavailable || !searchWorker) {
           const fallbackCandidates = buildFallbackSearchCandidates(
             searchTextLower,
             scopes,
@@ -3723,6 +3742,12 @@
             partial: false,
             totalCount: fallbackFiltered.length,
           });
+          return;
+        }
+
+        if (!searchWorkerReady) {
+          // Avoid rendering temporary fallback results while the worker is still
+          // indexing. Waiting for INIT_DONE keeps result counts/order consistent.
           return;
         }
 
