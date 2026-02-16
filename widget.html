@@ -4153,6 +4153,7 @@
       let latestFilteredRecords = [];
       let latestFacetsKey = null; // Track if facets match the current search
       let latestFacetsStateKey = null; // Track if facets match search + filters state
+      let hasCompletedInitialDataLoad = false;
       const SEARCH_CACHE_MAX_ENTRIES = 250;
       const searchResultCache = new Map();
       let ALL_ROW_INDICES = [];
@@ -7132,6 +7133,17 @@
         const t0 = performance.now();
         setLoadingState("data-refresh", true, "Refreshing questions...");
 
+        // Grist can briefly emit an empty payload while data is still loading.
+        // During first paint, keep showing loading UI instead of a misleading
+        // "No questions found" empty state.
+        if (!hasCompletedInitialDataLoad && (!records || records.length === 0)) {
+          setLoadingState("app-init", true, "Loading questions...");
+          updateHeaderStats([], 0);
+          updateFilterButtons();
+          updateSidebarPanels();
+          return;
+        }
+
         // Preserve current search and filter state
         const currentSearchText = getSearchTextLower();
         const currentScopes = getEffectiveScopes();
@@ -7143,6 +7155,7 @@
 
         // Update data structures
         DATA = (records || []).map(normalizeRecord);
+        hasCompletedInitialDataLoad = true;
         ROWS = buildSearchRows(DATA);
         rebuildHighlightLexicon();
         ALL_ROW_INDICES = ROWS.map((_, idx) => idx);
@@ -7188,7 +7201,7 @@
       window.addEventListener("load", () => {
         setTimeout(() => {
           // Check if data loaded
-          if (!DATA || DATA.length === 0) {
+          if (!hasCompletedInitialDataLoad && (!DATA || DATA.length === 0)) {
             DATA = [];
             ROWS = [];
             rebuildHighlightLexicon();
@@ -7198,7 +7211,7 @@
             updateFilterButtons();
             updateHeaderStats([], 0);
             updateSidebarPanels();
-            clearTransientLoadingStates();
+            setLoadingState("app-init", true, "Still loading questions...");
           }
         }, 1000);
       });
