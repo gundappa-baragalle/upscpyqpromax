@@ -961,6 +961,24 @@
         display: inline-flex;
       }
 
+      .readingProgressTrack {
+        margin-top: 10px;
+        width: 100%;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(88, 166, 255, 0.14);
+        overflow: hidden;
+        border: 1px solid rgba(88, 166, 255, 0.2);
+      }
+
+      .readingProgressBar {
+        width: 0%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #2f81f7 0%, #58a6ff 55%, #79c0ff 100%);
+        transition: width 0.18s ease-out;
+      }
+
       .spinner,
       .spinnerRing {
         width: 16px;
@@ -1953,6 +1971,10 @@
           animation-iteration-count: 1 !important;
           transition-duration: 0.01ms !important;
         }
+
+        .readingProgressBar {
+          transition: none;
+        }
       }
 
       @media (prefers-contrast: high) {
@@ -2412,6 +2434,9 @@
       <div class="loadingStatus" id="loadingStatus" role="status" aria-live="polite">
         <span class="spinnerRing" aria-hidden="true"></span>
         <span id="loadingStatusText">Loading questions...</span>
+      </div>
+      <div class="readingProgressTrack" aria-hidden="true">
+        <div class="readingProgressBar" id="readingProgressBar"></div>
       </div>
     </header>
 
@@ -6997,17 +7022,34 @@
 
       // FAB buttons
       const scrollToTopBtn = document.getElementById("scrollToTop");
+      const mainContentEl = document.getElementById("mainContent");
+      const readingProgressBar = document.getElementById("readingProgressBar");
+
+      function updateReadingProgress() {
+        if (!mainContentEl || !readingProgressBar) return;
+
+        const maxScrollable = mainContentEl.scrollHeight - mainContentEl.clientHeight;
+        const progressPercent =
+          maxScrollable > 0
+            ? Math.min(100, Math.max(0, (mainContentEl.scrollTop / maxScrollable) * 100))
+            : 0;
+
+        readingProgressBar.style.width = `${progressPercent.toFixed(2)}%`;
+        scrollToTopBtn.classList.toggle("hidden", mainContentEl.scrollTop <= 300);
+      }
+
       scrollToTopBtn.addEventListener("click", () => {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        if (!mainContentEl) return;
+        mainContentEl.scrollTo({ top: 0, behavior: "smooth" });
       });
 
-      window.addEventListener(
-        "scroll",
-        throttle(() => {
-          const shouldShow = window.scrollY > 300;
-          scrollToTopBtn.classList.toggle("hidden", !shouldShow);
-        }, 100),
-      );
+      if (mainContentEl) {
+        mainContentEl.addEventListener("scroll", throttle(updateReadingProgress, 80), {
+          passive: true,
+        });
+      }
+      window.addEventListener("resize", throttle(updateReadingProgress, 120));
+      requestAnimationFrame(updateReadingProgress);
 
       // Shortcuts
       const shortcutsPanel = document.getElementById("shortcuts");
