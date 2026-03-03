@@ -3346,18 +3346,106 @@
         );
       }
 
+      function parseFacetValues(raw) {
+        const out = [];
+        const seen = new Set();
+
+        const pushValue = (value) => {
+          const normalized = String(value || "").trim();
+          if (!normalized) return;
+          const key = normalized.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          out.push(normalized);
+        };
+
+        const visit = (value) => {
+          if (value === null || value === undefined) return;
+          if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
+          }
+          if (typeof value === "object") {
+            if (Array.isArray(value.L)) {
+              value.L.forEach(visit);
+              return;
+            }
+            const candidate =
+              value.name ?? value.label ?? value.title ?? value.displayValue;
+            if (candidate !== undefined) {
+              visit(candidate);
+            }
+            return;
+          }
+
+          const str = String(value).trim();
+          if (!str) return;
+          if (/[\n,;|]/.test(str)) {
+            str
+              .split(/[\n,;|]+/)
+              .map((part) => part.trim())
+              .filter(Boolean)
+              .forEach(pushValue);
+            return;
+          }
+          pushValue(str);
+        };
+
+        visit(raw);
+        return out;
+      }
+
+      function getRowFacetValues(row, key) {
+        const values = row?.[`${key}Values`];
+        if (Array.isArray(values) && values.length > 0) return values;
+        const fallback = row?.[key];
+        return fallback ? [fallback] : [];
+      }
+
+      function rowMatchesFacetSet(row, key, set) {
+        const values = getRowFacetValues(row, key);
+        for (let i = 0; i < values.length; i++) {
+          if (set.has(values[i])) return true;
+        }
+        return false;
+      }
+
+      function addFacetValuesToCountMap(countMap, values) {
+        for (let i = 0; i < values.length; i++) {
+          const value = values[i];
+          countMap.set(value, (countMap.get(value) || 0) + 1);
+        }
+      }
+
       function buildSearchRows(data) {
         const t0 = performance.now();
         const rows = data.map((r, index) => {
+          const examValues = parseFacetValues(r.exam_robot_exam || r.exam || "");
+          const yearValues = parseFacetValues(r.exam_robot_year || r.year || "");
+          const subjectValues = parseFacetValues(
+            r.subjects || r.exam_robot_subject || "",
+          );
+          const themeValues = parseFacetValues(
+            r.themes || r.exam_robot_theme || r.static_exam_robot_theme || "",
+          );
+          const topicValues = parseFacetValues(
+            r.topics || r.exam_robot_topic || r.static_exam_robot_topic || "",
+          );
+
           return {
             index,
             record: r,
             // Only keep metadata needed for filtering in the main thread
-            exam: r.exam_robot_exam || "",
-            year: r.exam_robot_year || "",
-            subject: r.exam_robot_subject || "",
-            theme: r.exam_robot_theme || "",
-            topic: (r.exam_robot_topic || "").trim(),
+            exam: examValues[0] || "",
+            year: yearValues[0] || "",
+            subject: subjectValues[0] || "",
+            theme: themeValues[0] || "",
+            topic: topicValues[0] || "",
+            examValues,
+            yearValues,
+            subjectValues,
+            themeValues,
+            topicValues,
           };
         });
 
@@ -3928,6 +4016,28 @@
         function computeFacets(candidates, filters) {
           const results = {};
           FACET_KEYS.forEach(k => results[k] = []);
+
+          const getFacetValues = (row, key) => {
+            const values = row && row[key + 'Values'];
+            if (Array.isArray(values) && values.length > 0) return values;
+            const fallback = row ? row[key] : '';
+            return fallback ? [fallback] : [];
+          };
+
+          const matchesFacet = (row, key, filterSet) => {
+            const values = getFacetValues(row, key);
+            for (let i = 0; i < values.length; i++) {
+              if (filterSet.has(values[i])) return true;
+            }
+            return false;
+          };
+
+          const addFacetCounts = (map, values) => {
+            for (let i = 0; i < values.length; i++) {
+              const val = values[i];
+              map.set(val, (map.get(val) || 0) + 1);
+            }
+          };
           
           const counts = {};
           FACET_KEYS.forEach(k => counts[k] = new Map());
@@ -3950,7 +4060,7 @@
             
             // Check against all active filters
             for (const key in activeFilters) {
-                if (!activeFilters[key].has(row[key])) {
+                if (!matchesFacet(row, key, activeFilters[key])) {
                     failCount++;
                     failedFilterKey = key;
                     if (failCount > 1) break; // Optimization: stop checking if already failed > 1
@@ -3960,14 +4070,12 @@
             if (failCount === 0) {
                 // Matches ALL filters. Contributes to ALL facets.
                 for (const key of FACET_KEYS) {
-                    const val = row[key];
-                    if (val) counts[key].set(val, (counts[key].get(val) || 0) + 1);
+                    addFacetCounts(counts[key], getFacetValues(row, key));
                 }
             } else if (failCount === 1) {
                 // Fails exactly one filter. Contributes ONLY to that one facet.
                 // (e.g. if it fails 'exam', it contributes to 'exam' counts, allowing the user to see other exams)
-                const val = row[failedFilterKey];
-                if (val) counts[failedFilterKey].set(val, (counts[failedFilterKey].get(val) || 0) + 1);
+                addFacetCounts(counts[failedFilterKey], getFacetValues(row, failedFilterKey));
             }
           }
 
@@ -4073,12 +4181,25 @@
             
             let match = true;
             if (hasFilters) {
-                for (const key in activeFilters) {
-                    if (!activeFilters[key].has(row[key])) {
-                        match = false;
-                        break;
+              for (const key in activeFilters) {
+                const facetValues = row[key + 'Values'];
+                if (Array.isArray(facetValues) && facetValues.length > 0) {
+                  let found = false;
+                  for (let f = 0; f < facetValues.length; f++) {
+                    if (activeFilters[key].has(facetValues[f])) {
+                      found = true;
+                      break;
                     }
+                  }
+                  if (!found) {
+                    match = false;
+                    break;
+                  }
+                } else if (!activeFilters[key].has(row[key])) {
+                  match = false;
+                  break;
                 }
+              }
             }
             
             if (!match) continue;
@@ -4692,8 +4813,10 @@
         for (let i = 0; i < ROWS.length; i++) {
           const row = ROWS[i];
           FACET_KEYS.forEach((key) => {
-            const value = row[key] || "";
-            if (value) sets[key].add(value);
+            const values = getRowFacetValues(row, key);
+            for (let j = 0; j < values.length; j++) {
+              sets[key].add(values[j]);
+            }
           });
         }
 
@@ -4725,7 +4848,6 @@
         }
 
         // Pre-compile filter checks for faster evaluation
-        const checks = [];
         const hasFilters = [];
         for (const key of FACET_KEYS) {
           const filterSet = filterSets[key];
@@ -4735,7 +4857,6 @@
               set: filterSet,
               size: filterSet.size,
             });
-            checks.push((row) => filterSet.has(row[key]));
           }
         }
 
@@ -4764,7 +4885,7 @@
           const filter = compiled.filters[i];
           if (
             excludeFacetKey !== filter.key &&
-            !filter.set.has(row[filter.key])
+            !rowMatchesFacetSet(row, filter.key, filter.set)
           )
             return false;
         }
@@ -5241,10 +5362,7 @@
             const row = ROWS[candidateIndices[i]];
             if (!row) continue;
             for (const key of FACET_KEYS) {
-              const value = row[key];
-              if (value) {
-                counts[key].set(value, (counts[key].get(value) || 0) + 1);
-              }
+              addFacetValuesToCountMap(counts[key], getRowFacetValues(row, key));
             }
           }
         } else if (compiled.size === 1) {
@@ -5256,25 +5374,22 @@
             const row = ROWS[candidateIndices[i]];
             if (!row) continue;
 
-            const matches = filterSet.has(row[filterKey]);
+            const matches = rowMatchesFacetSet(row, filterKey, filterSet);
 
             if (matches) {
               // Matches filter - contribute to all facets
               for (const key of FACET_KEYS) {
-                const value = row[key];
-                if (value) {
-                  counts[key].set(value, (counts[key].get(value) || 0) + 1);
-                }
+                addFacetValuesToCountMap(
+                  counts[key],
+                  getRowFacetValues(row, key),
+                );
               }
             } else {
               // Fails filter - contribute only to that facet
-              const value = row[filterKey];
-              if (value) {
-                counts[filterKey].set(
-                  value,
-                  (counts[filterKey].get(value) || 0) + 1,
-                );
-              }
+              addFacetValuesToCountMap(
+                counts[filterKey],
+                getRowFacetValues(row, filterKey),
+              );
             }
           }
         } else {
@@ -5289,7 +5404,7 @@
 
             for (let j = 0; j < compiled.filters.length; j++) {
               const filter = compiled.filters[j];
-              if (!filter.set.has(row[filter.key])) {
+              if (!rowMatchesFacetSet(row, filter.key, filter.set)) {
                 failCount++;
                 failedKey = filter.key;
                 // Early exit: If failed more than 1, we know behavior
@@ -5300,20 +5415,17 @@
             if (failCount === 0) {
               // Matches all filters - contribute to all facets
               for (const key of FACET_KEYS) {
-                const value = row[key];
-                if (value) {
-                  counts[key].set(value, (counts[key].get(value) || 0) + 1);
-                }
+                addFacetValuesToCountMap(
+                  counts[key],
+                  getRowFacetValues(row, key),
+                );
               }
             } else if (failCount === 1) {
               // Fails exactly one filter - contribute only to that facet
-              const value = row[failedKey];
-              if (value) {
-                counts[failedKey].set(
-                  value,
-                  (counts[failedKey].get(value) || 0) + 1,
-                );
-              }
+              addFacetValuesToCountMap(
+                counts[failedKey],
+                getRowFacetValues(row, failedKey),
+              );
             }
             // If failCount > 1, don't contribute to any facet counts
           }
@@ -5955,8 +6067,9 @@
 
         const topics = new Map();
         ROWS.forEach((row) => {
-          const topic = row.record.exam_robot_topic?.trim();
-          if (topic) {
+          const topicValues = getRowFacetValues(row, "topic");
+          for (let i = 0; i < topicValues.length; i++) {
+            const topic = topicValues[i];
             topics.set(topic, (topics.get(topic) || 0) + 1);
           }
         });
@@ -5993,10 +6106,10 @@
         const stats = stateManager.getStats();
 
         const exams = new Set(
-          ROWS.map((r) => r.record.exam_robot_exam?.trim()).filter(Boolean),
+          ROWS.flatMap((r) => getRowFacetValues(r, "exam")).filter(Boolean),
         );
         const subjects = new Set(
-          ROWS.map((r) => r.record.exam_robot_subject?.trim()).filter(Boolean),
+          ROWS.flatMap((r) => getRowFacetValues(r, "subject")).filter(Boolean),
         );
 
         const examCount = exams.size;
@@ -7171,6 +7284,13 @@
           question_name: toText(record.question_name),
           complete_question: toText(record.complete_question),
           question_type: toText(record.question_type),
+          exam: toText(record.exam),
+          year: toText(record.year),
+          subjects: record.subjects,
+          themes: record.themes,
+          topics: record.topics,
+          static_exam_robot_theme: toText(record.static_exam_robot_theme),
+          static_exam_robot_topic: toText(record.static_exam_robot_topic),
           official_correct_option: toText(record.official_correct_option),
           model_answer: toText(record.model_answer),
           key_points: toText(record.key_points),
@@ -7215,6 +7335,8 @@
           "exam",
           "year",
           "subjects",
+          "themes",
+          "topics",
           "static_exam_robot_theme",
           "static_exam_robot_topic",
           "exam_robot_question_id",
