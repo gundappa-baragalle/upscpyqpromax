@@ -5454,6 +5454,21 @@
         );
       }
 
+      function normalizeQuestionType(value) {
+        const type = String(value || "").trim().toLowerCase();
+        return type === "subjective" ? "subjective" : "mcq";
+      }
+
+      function getCorrectOption(record) {
+        return (
+          record.official_correct_option ||
+          record.exam_robot_correct_option ||
+          ""
+        )
+          .trim()
+          .toUpperCase();
+      }
+
       function buildCard(record, index) {
         const t0 = performance.now();
         const qid = getRecordId(record, index);
@@ -5464,6 +5479,9 @@
           .cloneNode(true)
           .querySelector(".card");
         card.dataset.qid = qid;
+        const questionType = normalizeQuestionType(record.question_type);
+        const isSubjective = questionType === "subjective";
+        card.dataset.questionType = questionType;
 
         // Build metadata
         const qmetaParts = [];
@@ -5519,12 +5537,28 @@
           }
         }
 
+        const optsContainer = card.querySelector(".opts");
+        if (optsContainer) {
+          optsContainer.classList.toggle("isHidden", isSubjective);
+        }
+
         // Set explanation content
         const explEl = card.querySelector('[data-expl="1"]');
         explEl.dataset.searchRaw =
-          record.exam_robot_explanation || "No explanation available";
+          isSubjective
+            ? [
+                record.model_answer,
+                record.key_points ? `Key points:\n${record.key_points}` : "",
+                record.evaluation_rubric
+                  ? `Evaluation rubric:\n${record.evaluation_rubric}`
+                  : "",
+                record.exam_robot_explanation,
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : record.exam_robot_explanation || "No explanation available";
         explEl.textContent =
-          record.exam_robot_explanation || "No explanation available";
+          explEl.dataset.searchRaw || "No explanation available";
         card.querySelector('[data-sources="1"]').textContent =
           record.exam_robot_answer_sources || "No sources provided";
         card.querySelector('[data-verdict="1"]').textContent =
@@ -5540,15 +5574,13 @@
           linkContainer.innerHTML = `<div class="muted" style="margin-top:6px;">🔗 <a target="_blank" rel="noopener" href="${escapeHtml(record.exam_robot_question_link)}">View Original Question</a></div>`;
         }
 
-        const correctOpt = (record.exam_robot_correct_option || "")
-          .trim()
-          .toUpperCase();
+        const correctOpt = getCorrectOption(record);
         card.dataset.correctOpt = correctOpt;
         const resPanel = card.querySelector('[data-result="1"]');
         const resText = card.querySelector('[data-result-text="1"]');
 
         // Show result if answered
-        if (st.answer) {
+        if (!isSubjective && st.answer) {
           card.dataset.answered = st.isCorrect ? "true" : "false";
           resPanel.classList.add("show");
           const isCorrect = !!st.isCorrect;
@@ -5596,6 +5628,8 @@
 
         const qid = card.dataset.qid || "";
         const correctOpt = (card.dataset.correctOpt || "").toUpperCase();
+        const questionType = normalizeQuestionType(card.dataset.questionType);
+        const isSubjective = questionType === "subjective";
 
         const sectionBtn = e.target.closest("[data-section]");
         if (sectionBtn) {
@@ -5619,6 +5653,7 @@
 
         const xBtn = e.target.closest("[data-x]");
         if (xBtn) {
+          if (isSubjective) return;
           e.stopPropagation();
           const letter = xBtn.getAttribute("data-x");
           const cur = stateManager.get(qid);
@@ -5633,6 +5668,7 @@
 
         const opt = e.target.closest(".opt");
         if (opt && !e.target.closest("[data-x]")) {
+          if (isSubjective) return;
           if (opt.classList.contains("strike")) return;
           const letter = opt.dataset.letter;
           const cur = stateManager.get(qid);
@@ -7118,6 +7154,11 @@
         };
         return {
           question_id: toText(record.question_id),
+          question_type: toText(record.question_type),
+          official_correct_option: toText(record.official_correct_option),
+          model_answer: toText(record.model_answer),
+          key_points: toText(record.key_points),
+          evaluation_rubric: toText(record.evaluation_rubric),
           exam_robot_question_id: toText(record.exam_robot_question_id),
           exam_robot_question_number: toText(record.exam_robot_question_number),
           exam_robot_exam: toText(record.exam_robot_exam),
@@ -7148,6 +7189,11 @@
         requiredAccess: "read table",
         columns: [
           "question_id",
+          "question_type",
+          "official_correct_option",
+          "model_answer",
+          "key_points",
+          "evaluation_rubric",
           "exam_robot_question_id",
           "exam_robot_question_number",
           "exam_robot_exam",
