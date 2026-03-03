@@ -3247,6 +3247,38 @@
 
       const SEARCH_SETTINGS_KEY = "mcq_search_settings_v1";
 
+      const REFERENCE_TABLE_CONFIG = {
+        exam: {
+          table: "Exams",
+          labelKeys: ["exam", "name", "title", "label"],
+        },
+        year: {
+          table: "Years",
+          labelKeys: ["year", "name", "label", "title"],
+        },
+        subject: {
+          table: "Subjects",
+          labelKeys: ["subject", "name", "title", "label"],
+        },
+        theme: {
+          table: "Themes",
+          labelKeys: ["theme", "name", "title", "label"],
+        },
+        topic: {
+          table: "Topics",
+          labelKeys: ["topic", "name", "title", "label"],
+        },
+      };
+
+      const referenceLookup = {
+        exam: new Map(),
+        year: new Map(),
+        subject: new Map(),
+        theme: new Map(),
+        topic: new Map(),
+      };
+      let referenceLookupPromise = null;
+
       let searchSettings = {
         scopeQuestion: true,
         scopeOptions: true,
@@ -3395,6 +3427,117 @@
         return out;
       }
 
+      function getRecordIdCandidate(value) {
+        if (value === null || value === undefined) return "";
+        if (typeof value === "number" || typeof value === "string") {
+          return String(value).trim();
+        }
+        if (typeof value === "object") {
+          return String(value.id ?? value.ref ?? value.rowId ?? "").trim();
+        }
+        return "";
+      }
+
+      function extractReferenceLabels(raw, facetKey) {
+        const map = referenceLookup[facetKey];
+        if (!map || map.size === 0) return [];
+        const labels = [];
+        const seen = new Set();
+
+        const visit = (value) => {
+          if (value === null || value === undefined) return;
+          if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
+          }
+          if (typeof value === "object" && Array.isArray(value.L)) {
+            value.L.forEach(visit);
+            return;
+          }
+          const id = getRecordIdCandidate(value);
+          if (!id) return;
+          const label = map.get(id);
+          if (!label) return;
+          const key = label.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          labels.push(label);
+        };
+
+        visit(raw);
+        return labels;
+      }
+
+      function resolveFacetValues(raw, facetKey, fallbackRaw = "") {
+        const resolved = extractReferenceLabels(raw, facetKey);
+        if (resolved.length > 0) return resolved;
+        const parsedRaw = parseFacetValues(raw);
+        if (parsedRaw.length > 0) return parsedRaw;
+        return parseFacetValues(fallbackRaw);
+      }
+
+      function extractRowsFromTablePayload(payload) {
+        if (!payload) return [];
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload.records)) return payload.records;
+        if (Array.isArray(payload.data)) return payload.data;
+        if (Array.isArray(payload.tableData)) return payload.tableData;
+        return [];
+      }
+
+      function pickBestLabel(record, preferredKeys = []) {
+        for (let i = 0; i < preferredKeys.length; i++) {
+          const key = preferredKeys[i];
+          const value = record?.[key];
+          if (value !== null && value !== undefined && String(value).trim()) {
+            return String(value).trim();
+          }
+        }
+
+        const fallbackKeys = ["name", "title", "label", "code", "slug"];
+        for (let i = 0; i < fallbackKeys.length; i++) {
+          const key = fallbackKeys[i];
+          const value = record?.[key];
+          if (value !== null && value !== undefined && String(value).trim()) {
+            return String(value).trim();
+          }
+        }
+        return "";
+      }
+
+      async function ensureReferenceLookupLoaded() {
+        if (referenceLookupPromise) return referenceLookupPromise;
+
+        referenceLookupPromise = (async () => {
+          if (!grist?.docApi?.fetchTable) return;
+
+          const keys = Object.keys(REFERENCE_TABLE_CONFIG);
+          const jobs = keys.map(async (facetKey) => {
+            const config = REFERENCE_TABLE_CONFIG[facetKey];
+            try {
+              const payload = await grist.docApi.fetchTable(config.table);
+              const rows = extractRowsFromTablePayload(payload);
+              const lookup = new Map();
+              for (let i = 0; i < rows.length; i++) {
+                const row = rows[i] || {};
+                const id = getRecordIdCandidate(row.id ?? row.recordId ?? row.ref ?? row);
+                if (!id) continue;
+                const label = pickBestLabel(row, config.labelKeys);
+                if (!label) continue;
+                lookup.set(id, label);
+              }
+              referenceLookup[facetKey] = lookup;
+            } catch (err) {
+              console.warn(`Failed to preload ${config.table} lookup`, err);
+            }
+          });
+
+          await Promise.all(jobs);
+        })();
+
+        return referenceLookupPromise;
+      }
+
       function getRowFacetValues(row, key) {
         const values = row?.[`${key}Values`];
         if (Array.isArray(values) && values.length > 0) return values;
@@ -3420,16 +3563,30 @@
       function buildSearchRows(data) {
         const t0 = performance.now();
         const rows = data.map((r, index) => {
-          const examValues = parseFacetValues(r.exam_robot_exam || r.exam || "");
-          const yearValues = parseFacetValues(r.exam_robot_year || r.year || "");
-          const subjectValues = parseFacetValues(
-            r.subjects || r.exam_robot_subject || "",
+          const examValues = resolveFacetValues(
+            r.examRaw,
+            "exam",
+            r.exam_robot_exam || r.exam || "",
           );
-          const themeValues = parseFacetValues(
-            r.themes || r.exam_robot_theme || r.static_exam_robot_theme || "",
+          const yearValues = resolveFacetValues(
+            r.yearRaw,
+            "year",
+            r.exam_robot_year || r.year || "",
           );
-          const topicValues = parseFacetValues(
-            r.topics || r.exam_robot_topic || r.static_exam_robot_topic || "",
+          const subjectValues = resolveFacetValues(
+            r.subjects,
+            "subject",
+            r.exam_robot_subject || "",
+          );
+          const themeValues = resolveFacetValues(
+            r.themes,
+            "theme",
+            r.exam_robot_theme || r.static_exam_robot_theme || "",
+          );
+          const topicValues = resolveFacetValues(
+            r.topics,
+            "topic",
+            r.exam_robot_topic || r.static_exam_robot_topic || "",
           );
 
           return {
@@ -7286,6 +7443,8 @@
           question_type: toText(record.question_type),
           exam: toText(record.exam),
           year: toText(record.year),
+          examRaw: record.exam,
+          yearRaw: record.year,
           subjects: record.subjects,
           themes: record.themes,
           topics: record.topics,
@@ -7362,9 +7521,11 @@
         ],
       });
 
-      grist.onRecords((records) => {
+      grist.onRecords(async (records) => {
         const t0 = performance.now();
         setLoadingState("data-refresh", true, "Refreshing questions...");
+
+        await ensureReferenceLookupLoaded();
 
         // Grist can briefly emit an empty payload while data is still loading.
         // During first paint, keep showing loading UI instead of a misleading
