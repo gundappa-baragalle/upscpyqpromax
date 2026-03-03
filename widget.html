@@ -91,7 +91,7 @@
       }
 
       .isHidden {
-        display: none;
+        display: none !important;
       }
 
       html {
@@ -7152,8 +7152,24 @@
           if (value === null || value === undefined) return "";
           return String(value).trim();
         };
+
+        const normalizedQuestion =
+          toText(record.complete_question) || toText(record.exam_robot_question);
+        const normalizedExam =
+          toText(record.exam_robot_exam) || toText(record.exam);
+        const normalizedYear =
+          toText(record.exam_robot_year) || toText(record.year);
+        const normalizedSubject =
+          toText(record.exam_robot_subject) || toText(record.subjects);
+        const normalizedTheme =
+          toText(record.exam_robot_theme) || toText(record.static_exam_robot_theme);
+        const normalizedTopic =
+          toText(record.exam_robot_topic) || toText(record.static_exam_robot_topic);
+
         return {
           question_id: toText(record.question_id),
+          question_name: toText(record.question_name),
+          complete_question: toText(record.complete_question),
           question_type: toText(record.question_type),
           official_correct_option: toText(record.official_correct_option),
           model_answer: toText(record.model_answer),
@@ -7161,13 +7177,13 @@
           evaluation_rubric: toText(record.evaluation_rubric),
           exam_robot_question_id: toText(record.exam_robot_question_id),
           exam_robot_question_number: toText(record.exam_robot_question_number),
-          exam_robot_exam: toText(record.exam_robot_exam),
-          exam_robot_year: toText(record.exam_robot_year),
-          exam_robot_subject: toText(record.exam_robot_subject),
-          exam_robot_theme: toText(record.exam_robot_theme),
-          exam_robot_topic: toText(record.exam_robot_topic),
+          exam_robot_exam: normalizedExam,
+          exam_robot_year: normalizedYear,
+          exam_robot_subject: normalizedSubject,
+          exam_robot_theme: normalizedTheme,
+          exam_robot_topic: normalizedTopic,
           exam_robot_answer_status: toText(record.exam_robot_answer_status),
-          exam_robot_question: toText(record.exam_robot_question),
+          exam_robot_question: normalizedQuestion,
           exam_robot_option_a: toText(record.exam_robot_option_a),
           exam_robot_option_b: toText(record.exam_robot_option_b),
           exam_robot_option_c: toText(record.exam_robot_option_c),
@@ -7189,11 +7205,18 @@
         requiredAccess: "read table",
         columns: [
           "question_id",
+          "question_name",
+          "complete_question",
           "question_type",
           "official_correct_option",
           "model_answer",
           "key_points",
           "evaluation_rubric",
+          "exam",
+          "year",
+          "subjects",
+          "static_exam_robot_theme",
+          "static_exam_robot_topic",
           "exam_robot_question_id",
           "exam_robot_question_number",
           "exam_robot_exam",
