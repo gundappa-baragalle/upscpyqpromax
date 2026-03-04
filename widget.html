@@ -91,7 +91,7 @@
       }
 
       .isHidden {
-        display: none;
+        display: none !important;
       }
 
       html {
@@ -3247,6 +3247,38 @@
 
       const SEARCH_SETTINGS_KEY = "mcq_search_settings_v1";
 
+      const REFERENCE_TABLE_CONFIG = {
+        exam: {
+          table: "Exams",
+          labelKeys: ["exam", "name", "title", "label"],
+        },
+        year: {
+          table: "Years",
+          labelKeys: ["year", "name", "label", "title"],
+        },
+        subject: {
+          table: "Subjects",
+          labelKeys: ["subject", "name", "title", "label"],
+        },
+        theme: {
+          table: "Themes",
+          labelKeys: ["theme", "name", "title", "label"],
+        },
+        topic: {
+          table: "Topics",
+          labelKeys: ["topic", "name", "title", "label"],
+        },
+      };
+
+      const referenceLookup = {
+        exam: new Map(),
+        year: new Map(),
+        subject: new Map(),
+        theme: new Map(),
+        topic: new Map(),
+      };
+      let referenceLookupPromise = null;
+
       let searchSettings = {
         scopeQuestion: true,
         scopeOptions: true,
@@ -3346,18 +3378,231 @@
         );
       }
 
+      function parseFacetValues(raw) {
+        const out = [];
+        const seen = new Set();
+
+        const pushValue = (value) => {
+          const normalized = String(value || "").trim();
+          if (!normalized) return;
+          const key = normalized.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          out.push(normalized);
+        };
+
+        const visit = (value) => {
+          if (value === null || value === undefined) return;
+          if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
+          }
+          if (typeof value === "object") {
+            if (Array.isArray(value.L)) {
+              value.L.forEach(visit);
+              return;
+            }
+            const candidate =
+              value.name ?? value.label ?? value.title ?? value.displayValue;
+            if (candidate !== undefined) {
+              visit(candidate);
+            }
+            return;
+          }
+
+          const str = String(value).trim();
+          if (!str) return;
+          if (/[\n,;|]/.test(str)) {
+            str
+              .split(/[\n,;|]+/)
+              .map((part) => part.trim())
+              .filter(Boolean)
+              .forEach(pushValue);
+            return;
+          }
+          pushValue(str);
+        };
+
+        visit(raw);
+        return out;
+      }
+
+      function getRecordIdCandidate(value) {
+        if (value === null || value === undefined) return "";
+        if (typeof value === "number" || typeof value === "string") {
+          return String(value).trim();
+        }
+        if (typeof value === "object") {
+          return String(value.id ?? value.ref ?? value.rowId ?? "").trim();
+        }
+        return "";
+      }
+
+      function extractReferenceLabels(raw, facetKey) {
+        const map = referenceLookup[facetKey];
+        if (!map || map.size === 0) return [];
+        const labels = [];
+        const seen = new Set();
+
+        const visit = (value) => {
+          if (value === null || value === undefined) return;
+          if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
+          }
+          if (typeof value === "object" && Array.isArray(value.L)) {
+            value.L.forEach(visit);
+            return;
+          }
+          const id = getRecordIdCandidate(value);
+          if (!id) return;
+          const label = map.get(id);
+          if (!label) return;
+          const key = label.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          labels.push(label);
+        };
+
+        visit(raw);
+        return labels;
+      }
+
+      function resolveFacetValues(raw, facetKey, fallbackRaw = "") {
+        const resolved = extractReferenceLabels(raw, facetKey);
+        if (resolved.length > 0) return resolved;
+        const parsedRaw = parseFacetValues(raw);
+        if (parsedRaw.length > 0) return parsedRaw;
+        return parseFacetValues(fallbackRaw);
+      }
+
+      function extractRowsFromTablePayload(payload) {
+        if (!payload) return [];
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload.records)) return payload.records;
+        if (Array.isArray(payload.data)) return payload.data;
+        if (Array.isArray(payload.tableData)) return payload.tableData;
+        return [];
+      }
+
+      function pickBestLabel(record, preferredKeys = []) {
+        for (let i = 0; i < preferredKeys.length; i++) {
+          const key = preferredKeys[i];
+          const value = record?.[key];
+          if (value !== null && value !== undefined && String(value).trim()) {
+            return String(value).trim();
+          }
+        }
+
+        const fallbackKeys = ["name", "title", "label", "code", "slug"];
+        for (let i = 0; i < fallbackKeys.length; i++) {
+          const key = fallbackKeys[i];
+          const value = record?.[key];
+          if (value !== null && value !== undefined && String(value).trim()) {
+            return String(value).trim();
+          }
+        }
+        return "";
+      }
+
+      async function ensureReferenceLookupLoaded() {
+        if (referenceLookupPromise) return referenceLookupPromise;
+
+        referenceLookupPromise = (async () => {
+          if (!grist?.docApi?.fetchTable) return;
+
+          const keys = Object.keys(REFERENCE_TABLE_CONFIG);
+          const jobs = keys.map(async (facetKey) => {
+            const config = REFERENCE_TABLE_CONFIG[facetKey];
+            try {
+              const payload = await grist.docApi.fetchTable(config.table);
+              const rows = extractRowsFromTablePayload(payload);
+              const lookup = new Map();
+              for (let i = 0; i < rows.length; i++) {
+                const row = rows[i] || {};
+                const id = getRecordIdCandidate(row.id ?? row.recordId ?? row.ref ?? row);
+                if (!id) continue;
+                const label = pickBestLabel(row, config.labelKeys);
+                if (!label) continue;
+                lookup.set(id, label);
+              }
+              referenceLookup[facetKey] = lookup;
+            } catch (err) {
+              console.warn(`Failed to preload ${config.table} lookup`, err);
+            }
+          });
+
+          await Promise.all(jobs);
+        })();
+
+        return referenceLookupPromise;
+      }
+
+      function getRowFacetValues(row, key) {
+        const values = row?.[`${key}Values`];
+        if (Array.isArray(values) && values.length > 0) return values;
+        const fallback = row?.[key];
+        return fallback ? [fallback] : [];
+      }
+
+      function rowMatchesFacetSet(row, key, set) {
+        const values = getRowFacetValues(row, key);
+        for (let i = 0; i < values.length; i++) {
+          if (set.has(values[i])) return true;
+        }
+        return false;
+      }
+
+      function addFacetValuesToCountMap(countMap, values) {
+        for (let i = 0; i < values.length; i++) {
+          const value = values[i];
+          countMap.set(value, (countMap.get(value) || 0) + 1);
+        }
+      }
+
       function buildSearchRows(data) {
         const t0 = performance.now();
         const rows = data.map((r, index) => {
+          const examValues = resolveFacetValues(
+            r.examRaw,
+            "exam",
+            r.exam_robot_exam || r.exam || "",
+          );
+          const yearValues = resolveFacetValues(
+            r.yearRaw,
+            "year",
+            r.exam_robot_year || r.year || "",
+          );
+          const subjectValues = resolveFacetValues(
+            r.subjects,
+            "subject",
+            r.exam_robot_subject || "",
+          );
+          const themeValues = resolveFacetValues(
+            r.themes,
+            "theme",
+            r.exam_robot_theme || r.static_exam_robot_theme || "",
+          );
+          const topicValues = resolveFacetValues(
+            r.topics,
+            "topic",
+            r.exam_robot_topic || r.static_exam_robot_topic || "",
+          );
+
           return {
             index,
             record: r,
             // Only keep metadata needed for filtering in the main thread
-            exam: r.exam_robot_exam || "",
-            year: r.exam_robot_year || "",
-            subject: r.exam_robot_subject || "",
-            theme: r.exam_robot_theme || "",
-            topic: (r.exam_robot_topic || "").trim(),
+            exam: examValues[0] || "",
+            year: yearValues[0] || "",
+            subject: subjectValues[0] || "",
+            theme: themeValues[0] || "",
+            topic: topicValues[0] || "",
+            examValues,
+            yearValues,
+            subjectValues,
+            themeValues,
+            topicValues,
           };
         });
 
@@ -3928,6 +4173,28 @@
         function computeFacets(candidates, filters) {
           const results = {};
           FACET_KEYS.forEach(k => results[k] = []);
+
+          const getFacetValues = (row, key) => {
+            const values = row && row[key + 'Values'];
+            if (Array.isArray(values) && values.length > 0) return values;
+            const fallback = row ? row[key] : '';
+            return fallback ? [fallback] : [];
+          };
+
+          const matchesFacet = (row, key, filterSet) => {
+            const values = getFacetValues(row, key);
+            for (let i = 0; i < values.length; i++) {
+              if (filterSet.has(values[i])) return true;
+            }
+            return false;
+          };
+
+          const addFacetCounts = (map, values) => {
+            for (let i = 0; i < values.length; i++) {
+              const val = values[i];
+              map.set(val, (map.get(val) || 0) + 1);
+            }
+          };
           
           const counts = {};
           FACET_KEYS.forEach(k => counts[k] = new Map());
@@ -3950,7 +4217,7 @@
             
             // Check against all active filters
             for (const key in activeFilters) {
-                if (!activeFilters[key].has(row[key])) {
+                if (!matchesFacet(row, key, activeFilters[key])) {
                     failCount++;
                     failedFilterKey = key;
                     if (failCount > 1) break; // Optimization: stop checking if already failed > 1
@@ -3960,14 +4227,12 @@
             if (failCount === 0) {
                 // Matches ALL filters. Contributes to ALL facets.
                 for (const key of FACET_KEYS) {
-                    const val = row[key];
-                    if (val) counts[key].set(val, (counts[key].get(val) || 0) + 1);
+                    addFacetCounts(counts[key], getFacetValues(row, key));
                 }
             } else if (failCount === 1) {
                 // Fails exactly one filter. Contributes ONLY to that one facet.
                 // (e.g. if it fails 'exam', it contributes to 'exam' counts, allowing the user to see other exams)
-                const val = row[failedFilterKey];
-                if (val) counts[failedFilterKey].set(val, (counts[failedFilterKey].get(val) || 0) + 1);
+                addFacetCounts(counts[failedFilterKey], getFacetValues(row, failedFilterKey));
             }
           }
 
@@ -4073,12 +4338,25 @@
             
             let match = true;
             if (hasFilters) {
-                for (const key in activeFilters) {
-                    if (!activeFilters[key].has(row[key])) {
-                        match = false;
-                        break;
+              for (const key in activeFilters) {
+                const facetValues = row[key + 'Values'];
+                if (Array.isArray(facetValues) && facetValues.length > 0) {
+                  let found = false;
+                  for (let f = 0; f < facetValues.length; f++) {
+                    if (activeFilters[key].has(facetValues[f])) {
+                      found = true;
+                      break;
                     }
+                  }
+                  if (!found) {
+                    match = false;
+                    break;
+                  }
+                } else if (!activeFilters[key].has(row[key])) {
+                  match = false;
+                  break;
                 }
+              }
             }
             
             if (!match) continue;
@@ -4692,8 +4970,10 @@
         for (let i = 0; i < ROWS.length; i++) {
           const row = ROWS[i];
           FACET_KEYS.forEach((key) => {
-            const value = row[key] || "";
-            if (value) sets[key].add(value);
+            const values = getRowFacetValues(row, key);
+            for (let j = 0; j < values.length; j++) {
+              sets[key].add(values[j]);
+            }
           });
         }
 
@@ -4725,7 +5005,6 @@
         }
 
         // Pre-compile filter checks for faster evaluation
-        const checks = [];
         const hasFilters = [];
         for (const key of FACET_KEYS) {
           const filterSet = filterSets[key];
@@ -4735,7 +5014,6 @@
               set: filterSet,
               size: filterSet.size,
             });
-            checks.push((row) => filterSet.has(row[key]));
           }
         }
 
@@ -4764,7 +5042,7 @@
           const filter = compiled.filters[i];
           if (
             excludeFacetKey !== filter.key &&
-            !filter.set.has(row[filter.key])
+            !rowMatchesFacetSet(row, filter.key, filter.set)
           )
             return false;
         }
@@ -5241,10 +5519,7 @@
             const row = ROWS[candidateIndices[i]];
             if (!row) continue;
             for (const key of FACET_KEYS) {
-              const value = row[key];
-              if (value) {
-                counts[key].set(value, (counts[key].get(value) || 0) + 1);
-              }
+              addFacetValuesToCountMap(counts[key], getRowFacetValues(row, key));
             }
           }
         } else if (compiled.size === 1) {
@@ -5256,25 +5531,22 @@
             const row = ROWS[candidateIndices[i]];
             if (!row) continue;
 
-            const matches = filterSet.has(row[filterKey]);
+            const matches = rowMatchesFacetSet(row, filterKey, filterSet);
 
             if (matches) {
               // Matches filter - contribute to all facets
               for (const key of FACET_KEYS) {
-                const value = row[key];
-                if (value) {
-                  counts[key].set(value, (counts[key].get(value) || 0) + 1);
-                }
+                addFacetValuesToCountMap(
+                  counts[key],
+                  getRowFacetValues(row, key),
+                );
               }
             } else {
               // Fails filter - contribute only to that facet
-              const value = row[filterKey];
-              if (value) {
-                counts[filterKey].set(
-                  value,
-                  (counts[filterKey].get(value) || 0) + 1,
-                );
-              }
+              addFacetValuesToCountMap(
+                counts[filterKey],
+                getRowFacetValues(row, filterKey),
+              );
             }
           }
         } else {
@@ -5289,7 +5561,7 @@
 
             for (let j = 0; j < compiled.filters.length; j++) {
               const filter = compiled.filters[j];
-              if (!filter.set.has(row[filter.key])) {
+              if (!rowMatchesFacetSet(row, filter.key, filter.set)) {
                 failCount++;
                 failedKey = filter.key;
                 // Early exit: If failed more than 1, we know behavior
@@ -5300,20 +5572,17 @@
             if (failCount === 0) {
               // Matches all filters - contribute to all facets
               for (const key of FACET_KEYS) {
-                const value = row[key];
-                if (value) {
-                  counts[key].set(value, (counts[key].get(value) || 0) + 1);
-                }
+                addFacetValuesToCountMap(
+                  counts[key],
+                  getRowFacetValues(row, key),
+                );
               }
             } else if (failCount === 1) {
               // Fails exactly one filter - contribute only to that facet
-              const value = row[failedKey];
-              if (value) {
-                counts[failedKey].set(
-                  value,
-                  (counts[failedKey].get(value) || 0) + 1,
-                );
-              }
+              addFacetValuesToCountMap(
+                counts[failedKey],
+                getRowFacetValues(row, failedKey),
+              );
             }
             // If failCount > 1, don't contribute to any facet counts
           }
@@ -5454,6 +5723,21 @@
         );
       }
 
+      function normalizeQuestionType(value) {
+        const type = String(value || "").trim().toLowerCase();
+        return type === "subjective" ? "subjective" : "mcq";
+      }
+
+      function getCorrectOption(record) {
+        return (
+          record.official_correct_option ||
+          record.exam_robot_correct_option ||
+          ""
+        )
+          .trim()
+          .toUpperCase();
+      }
+
       function buildCard(record, index) {
         const t0 = performance.now();
         const qid = getRecordId(record, index);
@@ -5464,6 +5748,9 @@
           .cloneNode(true)
           .querySelector(".card");
         card.dataset.qid = qid;
+        const questionType = normalizeQuestionType(record.question_type);
+        const isSubjective = questionType === "subjective";
+        card.dataset.questionType = questionType;
 
         // Build metadata
         const qmetaParts = [];
@@ -5519,12 +5806,28 @@
           }
         }
 
+        const optsContainer = card.querySelector(".opts");
+        if (optsContainer) {
+          optsContainer.classList.toggle("isHidden", isSubjective);
+        }
+
         // Set explanation content
         const explEl = card.querySelector('[data-expl="1"]');
         explEl.dataset.searchRaw =
-          record.exam_robot_explanation || "No explanation available";
+          isSubjective
+            ? [
+                record.model_answer,
+                record.key_points ? `Key points:\n${record.key_points}` : "",
+                record.evaluation_rubric
+                  ? `Evaluation rubric:\n${record.evaluation_rubric}`
+                  : "",
+                record.exam_robot_explanation,
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : record.exam_robot_explanation || "No explanation available";
         explEl.textContent =
-          record.exam_robot_explanation || "No explanation available";
+          explEl.dataset.searchRaw || "No explanation available";
         card.querySelector('[data-sources="1"]').textContent =
           record.exam_robot_answer_sources || "No sources provided";
         card.querySelector('[data-verdict="1"]').textContent =
@@ -5540,15 +5843,13 @@
           linkContainer.innerHTML = `<div class="muted" style="margin-top:6px;">🔗 <a target="_blank" rel="noopener" href="${escapeHtml(record.exam_robot_question_link)}">View Original Question</a></div>`;
         }
 
-        const correctOpt = (record.exam_robot_correct_option || "")
-          .trim()
-          .toUpperCase();
+        const correctOpt = getCorrectOption(record);
         card.dataset.correctOpt = correctOpt;
         const resPanel = card.querySelector('[data-result="1"]');
         const resText = card.querySelector('[data-result-text="1"]');
 
         // Show result if answered
-        if (st.answer) {
+        if (!isSubjective && st.answer) {
           card.dataset.answered = st.isCorrect ? "true" : "false";
           resPanel.classList.add("show");
           const isCorrect = !!st.isCorrect;
@@ -5596,6 +5897,8 @@
 
         const qid = card.dataset.qid || "";
         const correctOpt = (card.dataset.correctOpt || "").toUpperCase();
+        const questionType = normalizeQuestionType(card.dataset.questionType);
+        const isSubjective = questionType === "subjective";
 
         const sectionBtn = e.target.closest("[data-section]");
         if (sectionBtn) {
@@ -5619,6 +5922,7 @@
 
         const xBtn = e.target.closest("[data-x]");
         if (xBtn) {
+          if (isSubjective) return;
           e.stopPropagation();
           const letter = xBtn.getAttribute("data-x");
           const cur = stateManager.get(qid);
@@ -5633,6 +5937,7 @@
 
         const opt = e.target.closest(".opt");
         if (opt && !e.target.closest("[data-x]")) {
+          if (isSubjective) return;
           if (opt.classList.contains("strike")) return;
           const letter = opt.dataset.letter;
           const cur = stateManager.get(qid);
@@ -5919,8 +6224,9 @@
 
         const topics = new Map();
         ROWS.forEach((row) => {
-          const topic = row.record.exam_robot_topic?.trim();
-          if (topic) {
+          const topicValues = getRowFacetValues(row, "topic");
+          for (let i = 0; i < topicValues.length; i++) {
+            const topic = topicValues[i];
             topics.set(topic, (topics.get(topic) || 0) + 1);
           }
         });
@@ -5957,10 +6263,10 @@
         const stats = stateManager.getStats();
 
         const exams = new Set(
-          ROWS.map((r) => r.record.exam_robot_exam?.trim()).filter(Boolean),
+          ROWS.flatMap((r) => getRowFacetValues(r, "exam")).filter(Boolean),
         );
         const subjects = new Set(
-          ROWS.map((r) => r.record.exam_robot_subject?.trim()).filter(Boolean),
+          ROWS.flatMap((r) => getRowFacetValues(r, "subject")).filter(Boolean),
         );
 
         const examCount = exams.size;
@@ -7116,17 +7422,47 @@
           if (value === null || value === undefined) return "";
           return String(value).trim();
         };
+
+        const normalizedQuestion =
+          toText(record.complete_question) || toText(record.exam_robot_question);
+        const normalizedExam =
+          toText(record.exam_robot_exam) || toText(record.exam);
+        const normalizedYear =
+          toText(record.exam_robot_year) || toText(record.year);
+        const normalizedSubject =
+          toText(record.exam_robot_subject) || toText(record.subjects);
+        const normalizedTheme =
+          toText(record.exam_robot_theme) || toText(record.static_exam_robot_theme);
+        const normalizedTopic =
+          toText(record.exam_robot_topic) || toText(record.static_exam_robot_topic);
+
         return {
           question_id: toText(record.question_id),
+          question_name: toText(record.question_name),
+          complete_question: toText(record.complete_question),
+          question_type: toText(record.question_type),
+          exam: toText(record.exam),
+          year: toText(record.year),
+          examRaw: record.exam,
+          yearRaw: record.year,
+          subjects: record.subjects,
+          themes: record.themes,
+          topics: record.topics,
+          static_exam_robot_theme: toText(record.static_exam_robot_theme),
+          static_exam_robot_topic: toText(record.static_exam_robot_topic),
+          official_correct_option: toText(record.official_correct_option),
+          model_answer: toText(record.model_answer),
+          key_points: toText(record.key_points),
+          evaluation_rubric: toText(record.evaluation_rubric),
           exam_robot_question_id: toText(record.exam_robot_question_id),
           exam_robot_question_number: toText(record.exam_robot_question_number),
-          exam_robot_exam: toText(record.exam_robot_exam),
-          exam_robot_year: toText(record.exam_robot_year),
-          exam_robot_subject: toText(record.exam_robot_subject),
-          exam_robot_theme: toText(record.exam_robot_theme),
-          exam_robot_topic: toText(record.exam_robot_topic),
+          exam_robot_exam: normalizedExam,
+          exam_robot_year: normalizedYear,
+          exam_robot_subject: normalizedSubject,
+          exam_robot_theme: normalizedTheme,
+          exam_robot_topic: normalizedTopic,
           exam_robot_answer_status: toText(record.exam_robot_answer_status),
-          exam_robot_question: toText(record.exam_robot_question),
+          exam_robot_question: normalizedQuestion,
           exam_robot_option_a: toText(record.exam_robot_option_a),
           exam_robot_option_b: toText(record.exam_robot_option_b),
           exam_robot_option_c: toText(record.exam_robot_option_c),
@@ -7148,6 +7484,20 @@
         requiredAccess: "read table",
         columns: [
           "question_id",
+          "question_name",
+          "complete_question",
+          "question_type",
+          "official_correct_option",
+          "model_answer",
+          "key_points",
+          "evaluation_rubric",
+          "exam",
+          "year",
+          "subjects",
+          "themes",
+          "topics",
+          "static_exam_robot_theme",
+          "static_exam_robot_topic",
           "exam_robot_question_id",
           "exam_robot_question_number",
           "exam_robot_exam",
@@ -7171,9 +7521,11 @@
         ],
       });
 
-      grist.onRecords((records) => {
+      grist.onRecords(async (records) => {
         const t0 = performance.now();
         setLoadingState("data-refresh", true, "Refreshing questions...");
+
+        await ensureReferenceLookupLoaded();
 
         // Grist can briefly emit an empty payload while data is still loading.
         // During first paint, keep showing loading UI instead of a misleading
